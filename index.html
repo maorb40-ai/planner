@@ -14128,7 +14128,7 @@ async function bootAfterUnlock(){
   setInterval(updateNowLines, 60000);
   loadWeather().then(m => { if (m) renderAll(true); });
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')){
-    navigator.serviceWorker.register('sw.js').then(reg => {
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
       reg.addEventListener('updatefound', () => {
         const w = reg.installing;
         if (!w) return;
