@@ -1188,7 +1188,7 @@ body.focus-mode .banner-wrap, body.focus-mode .shabbat-ribbon{ display: none; }
 .btn.recording{ color: var(--danger); animation: pulse 1s infinite; }
 
 /* V4.5: רצועת "הבא בתור" */
-.next-up-bar{ position:sticky; top:0; z-index:40; display:flex; align-items:center; gap:10px;
+.next-up-bar{ position:sticky; top:var(--app-bar-h,56px); z-index:40; display:flex; align-items:center; gap:10px;
   padding:6px 16px; background:var(--accent-soft); color:var(--accent-ink); cursor:pointer;
   font-size:.86em; }
 .next-up-bar .nu-t{ font-weight:800; }
@@ -13526,6 +13526,10 @@ function nextUpItem(){
 }
 function paintNextUpBar(){
   const bar = $('#nextUpBar'); if (!bar) return;
+  // הרצועה תלויה בגובה סרגל העליון בפועל (משתנה עם גודל הפונט/גלישת שורה) —
+  // בלי זה היא הייתה נדבקת מתחת ל-app-bar במקום מתחתיו, ונעלמת מאחוריו בגלילה.
+  const appBar = document.querySelector('.app-bar');
+  if (appBar) document.documentElement.style.setProperty('--app-bar-h', appBar.offsetHeight + 'px');
   if (!DB.settings.showNextUp){ bar.hidden = true; return; }
   const n = nextUpItem();
   if (!n){ bar.hidden = true; return; }
@@ -14093,6 +14097,7 @@ async function bootAfterUnlock(){
   applySeasonalTheme();
   paintNextUpBar();
   setInterval(paintNextUpBar, 60000);   // V4.5: מתעדכן כל דקה, כדי שהזמן שנותר תמיד נכון
+  window.addEventListener('resize', debounce(paintNextUpBar, 200));  // גובה הסרגל משתנה בגלישת שורה
   Sync.start();                // סנכרון ברשת המקומית
   checkBackupReminder();
   setInterval(updateNowLines, 60000);
