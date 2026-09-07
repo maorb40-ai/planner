@@ -214,7 +214,7 @@ body{
 .seg button[aria-pressed="true"]{ background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
 
 .spacer{ flex: 1 1 auto; }
-.nav-group{ display: flex; align-items: center; gap: 6px; }
+.nav-group{ display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 
 .btn{
   font: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
@@ -1466,6 +1466,15 @@ body.split-on #view-day > .day-grid{ grid-column:1; }
 body.split-on #view-day > .split-pane{ grid-column:2; grid-row:1/-1; position:sticky; top:8px; }
 @media (max-width:900px){ body.split-on #view-day{ grid-template-columns:1fr; }
   body.split-on #view-day > .split-pane{ grid-column:1; grid-row:auto; position:static; } }
+.split-week-strip{ display:flex; flex-direction:column; gap:4px; }
+.split-week-cell{ display:flex; align-items:center; gap:8px; padding:5px 8px; border-radius:8px;
+  border:1px solid transparent; background:none; font:inherit; color:var(--ink); cursor:pointer; text-align:right; }
+.split-week-cell:hover{ background:var(--panel-2); }
+.split-week-cell.cur{ border-color:var(--accent); background:var(--accent-soft); }
+.split-week-cell .dn{ font-size:.72em; color:var(--ink-soft); width:26px; }
+.split-week-cell .num{ font-weight:700; flex:1; }
+.split-week-cell .cnt{ font-size:.76em; background:var(--accent-soft); color:var(--accent-ink);
+  border-radius:999px; padding:1px 7px; }
 
 /* 25. מצב צפוף */
 body.compact{ --radius-sm:7px; }
@@ -2278,7 +2287,8 @@ const DEFAULTS = {
   stageChecklists: {},    // { jobStatusId: [items] } — צ׳קליסט אוטומטי לפי שלב עבודה
   parashaNotes: {},       // { parashaName: text } — הערה אישית שנשמרת לאותה פרשה משנה לשנה
   annualReminders: [],    // תזכורות שנתיות כלליות (לא יום הולדת/אזכרה) — { id, name, gm, gd, remindDays, note }
-  archives: {}            // { year: { days:{...}, archivedAt } } — ימים ישנים שהועברו לארכיון קריא-בלבד
+  archives: {},           // { year: { days:{...}, archivedAt } } — ימים ישנים שהועברו לארכיון קריא-בלבד
+  auditLog: []            // { at, action, kind, label } — יצירה/מחיקה של רשומות עסקיות
 };
 
 const DAY_DEFAULT = () => ({
@@ -2347,7 +2357,12 @@ const JOB_DEFAULT = () => ({ id: uid(), title: '', who: '', iso: '', time: '', k
                              crew: [],         // [{ who, pay, paid }]
                              noteSketch: null, // כתב יד להערות
                              rating: 0,        // V4.5: שביעות רצון הלקוח, 1–5
-                             updatedAt: 0 });  // V4.5: "נערך לאחרונה"
+                             updatedAt: 0,     // V4.5: "נערך לאחרונה"
+                             /* --- V4.6 --- */
+                             shootMinutes: 0,     // זמן צילום בפועל שנצבר (סטופר)
+                             shootStartedAt: 0,   // אם רץ כרגע — זמן ההתחלה
+                             photosUploaded: false, // הועלו תמונות ללקוח
+                             equipChecked: [] });  // אילו פריטים בצ'קליסט הציוד סומנו
 
 /* --- V4: מבני נתונים חדשים --- */
 const LEAD_STAGES = [
@@ -2395,6 +2410,7 @@ function loadDB(){
     .forEach(k => { if (!Array.isArray(DB[k])) DB[k] = []; });
   if (!DB.availability || typeof DB.availability !== 'object') DB.availability = {};
   if (!DB.stageChecklists || typeof DB.stageChecklists !== 'object') DB.stageChecklists = {};
+  if (!Array.isArray(DB.auditLog)) DB.auditLog = [];
   if (!DB.parashaNotes || typeof DB.parashaNotes !== 'object') DB.parashaNotes = {};
   if (!DB.archives || typeof DB.archives !== 'object') DB.archives = {};
   if (!DB.settings.docCounters) DB.settings.docCounters = { quote: 1, contract: 1, invoice: 1, receipt: 1 };
@@ -2439,6 +2455,10 @@ function loadDB(){
     if (j.noteSketch === undefined) j.noteSketch = null;
     if (j.rating === undefined)    j.rating = 0;
     if (j.updatedAt === undefined) j.updatedAt = 0;
+    if (j.shootMinutes === undefined)   j.shootMinutes = 0;
+    if (j.shootStartedAt === undefined) j.shootStartedAt = 0;
+    if (j.photosUploaded === undefined) j.photosUploaded = false;
+    if (!Array.isArray(j.equipChecked)) j.equipChecked = [];
   });
   DB.leads.forEach(l => { if (l && l.noteSketch === undefined) l.noteSketch = null; });
   DB.docs.forEach(d => {
@@ -2538,6 +2558,24 @@ function trashPush(kind, label, data, ctx){
   DB.trash = DB.trash || [];
   DB.trash.unshift({ id: uid(), at: Date.now(), kind, label, data: JSON.parse(JSON.stringify(data)), ctx: ctx || {} });
   if (DB.trash.length > 120) DB.trash.length = 120;
+  logAudit('מחיקה', kind, label);
+}
+/** יומן פעולות קליל — לא עוטף כל פעולה במערכת, אלא רק את הרגעים המשמעותיים:
+    יצירה ומחיקה של רשומות עסקיות. שימושי כשעובד/עוזר משתמש באפליקציה. */
+function logAudit(action, kind, label){
+  DB.auditLog = DB.auditLog || [];
+  DB.auditLog.unshift({ at: Date.now(), action, kind, label: String(label || '').slice(0, 80) });
+  if (DB.auditLog.length > 500) DB.auditLog.length = 500;
+}
+function openAuditLog(){
+  const body = el('div', { style: 'display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow:auto' });
+  const log = DB.auditLog || [];
+  if (!log.length) body.appendChild(el('div', { class: 'empty-note', text: 'עדיין אין פעולות רשומות.' }));
+  log.slice(0, 300).forEach(e => body.appendChild(el('div', { class: 'agenda-item' }, [
+    el('span', { class: 'tm', text: new Date(e.at).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' }) }),
+    el('span', { class: 'tx', text: `${e.action} · ${e.kind} · ${e.label}` })
+  ])));
+  openModal('יומן פעולות', body, [ el('button', { class: 'btn', onclick: closeModal }, 'סגירה') ]);
 }
 function trashRestore(item){
   const d = item.data, c = item.ctx || {};
@@ -4550,6 +4588,22 @@ function renderSettings(){
       mkSelect([[3, '3'], [7, '7'], [14, '14'], [30, '30']], S.deskBackupKeep,
         v => { S.deskBackupKeep = Number(v); saveDB(); }),
       'נשמרים בתיקיית backups שליד קובץ הנתונים'));
+    const extraDirBox = el('div', { class: 'row' });
+    const paintExtraDir = async () => {
+      extraDirBox.innerHTML = '';
+      const dir = await window.plannerDesktop.getExtraBackupDir();
+      extraDirBox.appendChild(el('span', { style: 'font-size:.8em;color:var(--ink-soft);flex:1', text: dir || 'לא נבחרה' }));
+      extraDirBox.appendChild(el('button', { class: 'btn sm', onclick: async () => {
+        await window.plannerDesktop.chooseExtraBackupDir(); paintExtraDir();
+      } }, dir ? 'שינוי' : 'בחירה'));
+      if (dir) extraDirBox.appendChild(el('button', { class: 'btn sm ghost', onclick: async () => {
+        await window.plannerDesktop.clearExtraBackupDir(); paintExtraDir();
+      } }, '✕'));
+    };
+    paintExtraDir();
+    gS.appendChild(setRow('תיקיית גיבוי נוספת ("בענן")', extraDirBox,
+      'כל גיבוי אוטומטי יישמר גם כאן. בחר תיקייה מסונכרנת של Google Drive / OneDrive / Dropbox — ' +
+      'כך יש עותק בענן בלי חיבור ישיר לשירות'));
     const traySw = mkSwitch(true, v => window.plannerDesktop.setTrayEnabled(v));
     const autoSw = mkSwitch(false, v => window.plannerDesktop.setAutoLaunch(v));
     gS.appendChild(setRow('סמל במגש המערכת', traySw,
@@ -4582,6 +4636,10 @@ function renderSettings(){
         remotes.length ? 'ניהול (' + remotes.length + ')' : 'הוספה'),
       remotes.length ? remotes.map(r => r.name || 'מחשב').join(' · ')
                      : 'הוסף מחשב לכל רשת קבועה — למשל בית וסטודיו'));
+  } else {
+    gS.appendChild(setRow('סנכרון ברשת המקומית (המחשב הזה)',
+      el('button', { class: 'btn sm', onclick: () => { closeDrawer(); openDesktopSyncPanel(); } }, 'פרטי חיבור ופיד יומן'),
+      'הכתובת, האסימון, ופיד יומן חי (webcal) לגוגל קלנדר / יומן אייפון'));
   }
   gS.appendChild(setRow('כל כמה זמן',
     mkSelect([[3, '3 שעות'], [6, '6 שעות'], [12, '12 שעות'], [24, 'יממה']], S.backupEveryHours,
@@ -4593,6 +4651,7 @@ function renderSettings(){
   gS.appendChild(el('div', { class: 'nav-group', style: 'flex-wrap:wrap;gap:8px' }, [
     el('button', { class: 'btn', onclick: () => { closeDrawerGlobal(); openVersions(); } }, '🕘 היסטוריית גרסאות'),
     el('button', { class: 'btn', onclick: () => { closeDrawerGlobal(); openTrash(); } }, '🗑 סל מיחזור'),
+    el('button', { class: 'btn', onclick: () => { closeDrawerGlobal(); openAuditLog(); } }, '📜 יומן פעולות'),
     el('button', { class: 'btn', onclick: exportSync }, '🔄 קובץ סנכרון'),
     el('button', { class: 'btn', onclick: importSync }, '🔀 מיזוג מקובץ'),
     el('button', { class: 'btn', onclick: exportFullICS }, '📤 ייצוא ICS מלא')
@@ -5360,6 +5419,11 @@ function searchAll(q){
   DB.recurring.forEach(r => push('', 'משימה קבועה', r.title));
   DB.contacts.forEach(c => push('', 'איש קשר',
     [c.name, c.phone, c.email, c.org, c.note, (c.tags || []).join(' ')].filter(Boolean).join(' · ')));
+  DB.jobs.forEach(j => push(j.iso || '', '📷 עבודה',
+    [j.title, j.kind, j.where, contactName(j.who), j.note].filter(Boolean).join(' · ')));
+  DB.docs.forEach(d => push(d.iso || '', '🧾 מסמך',
+    [DOC_KINDS[d.kind] ? DOC_KINDS[d.kind].name : '', d.number, contactName(d.who), d.terms].filter(Boolean).join(' · ')));
+  DB.leads.forEach(l => push(l.iso || '', '📈 פנייה', [l.name, l.phone, l.source, l.note].filter(Boolean).join(' · ')));
   hits.sort((a, b) => (b.iso || '').localeCompare(a.iso || ''));
   return hits.slice(0, 80);
 }
@@ -6177,7 +6241,7 @@ function openContacts(){
   openModal('אנשי קשר', [ search, count, list ], [
     el('button', { class: 'btn primary', onclick: () => {
       const c = { id: uid(), name: '', phone: '', email: '', org: '', note: '', tags: [], bday: null };
-      DB.contacts.push(c); invalidateContactCache(); saveDB(); editContact(c, () => openContacts());
+      DB.contacts.push(c); invalidateContactCache(); logAudit('יצירה', 'איש קשר', 'חדש'); saveDB(); editContact(c, () => openContacts());
     } }, '＋ איש קשר'),
     el('button', { class: 'btn', onclick: importContactsFile }, '⬆ ייבוא מקובץ'),
     el('button', { class: 'btn', onclick: exportContactsVCF }, '⬇ ייצוא vCard'),
@@ -7412,6 +7476,7 @@ function clientHistory(contactId){
   const jobs = DB.jobs.filter(j => j.who === contactId);
   const fin  = DB.finance.filter(f => f.who === contactId);
   const time = DB.timeLogs.filter(t => t.who === contactId);
+  const docs = DB.docs.filter(d => d.who === contactId);
   const todos = [], appts = [];
   Object.entries(DB.days).forEach(([iso, r]) => {
     (r.todos || []).forEach(t => { if (t && t.who === contactId) todos.push({ iso, t }); });
@@ -7420,7 +7485,7 @@ function clientHistory(contactId){
   const income = fin.filter(f => f.kind === 'in').reduce((s, f) => s + Number(f.amount || 0), 0);
   const minutes = time.reduce((s, t) => s + Number(t.minutes || 0), 0);
   const owed = jobs.reduce((s, j) => s + Math.max(0, Number(j.price || 0) - Number(j.paid || 0)), 0);
-  return { jobs, fin, time, todos, appts, income, minutes, owed };
+  return { jobs, fin, time, todos, appts, docs, income, minutes, owed };
 }
 
 function openClientCard(contactId){
@@ -7464,13 +7529,13 @@ function openClientCard(contactId){
       el('span', { class: 'tm', text: x.a.time || '' }),
       el('span', { class: 'tx' }, [ document.createTextNode(x.a.what || ''),
         el('small', { text: x.iso.split('-').reverse().join('/') + (x.a.where ? ' · ' + x.a.where : '') }) ])
-    ]))));
+    ]))) || el('div', { class: 'empty-note', text: 'אין פגישות ללקוח הזה' }));
 
   box.appendChild(section('משימות', h.todos.sort((a, b) => b.iso.localeCompare(a.iso)).map(x =>
     el('div', { class: 'agenda-item' + (x.t.d ? ' done' : ''), onclick: () => jump(x.iso) }, [
       el('span', { class: 'tm', text: x.iso.slice(5).split('-').reverse().join('/') }),
       el('span', { class: 'tx', text: x.t.t })
-    ]))));
+    ]))) || el('div', { class: 'empty-note', text: 'אין משימות ללקוח הזה' }));
 
   box.appendChild(section('תנועות כספיות', h.fin.sort((a, b) => b.iso.localeCompare(a.iso)).map(f =>
     el('div', { class: 'agenda-item' }, [
@@ -7478,7 +7543,15 @@ function openClientCard(contactId){
       el('span', { class: 'tx', text: f.note || f.cat || '' }),
       el('span', { class: 'money ' + (f.kind === 'in' ? 'in' : 'out'),
                    text: (f.kind === 'in' ? '+' : '−') + money(f.amount) })
-    ]))));
+    ]))) || el('div', { class: 'empty-note', text: 'אין תנועות כספיות ללקוח הזה' }));
+
+  box.appendChild(section('מסמכים', h.docs.sort((a, b) => (b.iso || '').localeCompare(a.iso || '')).map(d =>
+    el('div', { class: 'agenda-item', onclick: () => { closeModal(); editDoc(d); } }, [
+      el('span', { class: 'tm', text: d.iso ? d.iso.slice(5).split('-').reverse().join('/') : '—' }),
+      el('span', { class: 'tx' }, [ document.createTextNode(DOC_KINDS[d.kind].name + ' ' + (d.number || '')),
+        el('small', { text: money(docTotals(d).total) }) ]),
+      el('span', { class: 'pill-status', text: (DOC_STATUS[d.status] || [''])[0] })
+    ]))) || el('div', { class: 'empty-note', text: 'אין מסמכים ללקוח הזה' }));
 
   openModal('כרטיס לקוח', box, [
     el('button', { class: 'btn primary', onclick: () => { closeModal(); openJobEditor(Object.assign(JOB_DEFAULT(), { who: contactId, iso: isoOf(State.cursor) })); } }, '＋ עבודה חדשה'),
@@ -7490,12 +7563,41 @@ function openClientCard(contactId){
 /* ============================ עבודות (צילומים) ============================ */
 function jobsForISO(iso){ return DB.jobs.filter(j => j.iso === iso); }
 
+/** תיוג אוטומטי — מנחש סוג עבודה מתוך הכותרת, לפי מילות מפתח נפוצות.
+    לא דורס קלט קיים — משמש רק כשדה "סוג" ריק. */
+const KIND_RULES = [
+  [/חתונ/, 'חתונה'], [/אירוסין|כלולות/, 'אירוסין'], [/בר\s?מצו/, 'בר מצווה'], [/בת\s?מצו/, 'בת מצווה'],
+  [/ברית|בריתה/, 'ברית'], [/יום\s?הולדת|יומהולדת|יום־הולדת/, 'יום הולדת'], [/גיל\s?שנה/, 'גיל שנה'],
+  [/פורים/, 'פורים'], [/חנוכה/, 'חנוכה'], [/משפחתי|משפחה/, 'משפחתי'], [/הריון|בטן/, 'הריון'],
+  [/תדמית|עסקי/, 'תדמית'], [/קייקסמאש|קייק\s?סמאש/, 'קייקסמאש']
+];
+function guessJobKind(title){
+  const t = String(title || '');
+  for (const [re, kind] of KIND_RULES) if (re.test(t)) return kind;
+  return '';
+}
 function openJobEditor(job, after){
   const isNew = !DB.jobs.includes(job);
   const title = el('input', { type: 'text', value: job.title, placeholder: 'למשל: בר מצווה — משפחת לוי' });
-  title.addEventListener('input', () => { job.title = title.value; if (!isNew) saveDB(); });
-  const kind = el('input', { type: 'text', value: job.kind, placeholder: 'סוג: חתונה / בר מצווה / תדמית' });
+  title.addEventListener('input', () => {
+    job.title = title.value;
+    if (isNew && !job.kind.trim()){ const g = guessJobKind(job.title); if (g){ job.kind = g; kind.value = g; } }
+    if (!isNew) saveDB();
+  });
+  const kind = el('input', { type: 'text', value: job.kind, placeholder: 'סוג: חתונה / בר מצווה / תדמית (מוצע אוטומטית מהכותרת)' });
   kind.addEventListener('input', () => { job.kind = kind.value; if (!isNew) saveDB(); });
+  /* --- V4.6: אם...אז — כשיש חבילה בשם שתואם לסוג העבודה והמחיר עדיין ריק, מציעים למלא ממנה --- */
+  kind.addEventListener('change', () => {
+    if (Number(price.value) || !job.kind.trim()) return;
+    const k = job.kind.trim().toLowerCase();
+    const pkg = DB.packages.find(p => p.name && (k.includes(p.name.trim().toLowerCase()) || p.name.trim().toLowerCase().includes(k)));
+    if (!pkg) return;
+    const total = (pkg.items || []).reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.price) || 0), 0);
+    if (!total) return;
+    if (confirm(`נמצאה חבילה מתאימה "${pkg.name}" בסך ${money(total)}. למלא כמחיר לעבודה?`)){
+      price.value = total; job.price = total; if (!isNew) saveDB();
+    }
+  });
   const date = el('input', { type: 'date', value: job.iso || isoOf(State.cursor) });
   date.addEventListener('change', () => { job.iso = date.value; if (!isNew) saveDB(); });
   const time = el('input', { type: 'text', value: job.time, placeholder: 'שעה' });
@@ -7556,6 +7658,55 @@ function openJobEditor(job, after){
   };
   drawCrew();
 
+  /* --- V4.6: סטופר זמן צילום --- */
+  const stopwatchBox = el('div', { class: 'row' });
+  const paintStopwatch = () => {
+    stopwatchBox.innerHTML = '';
+    const running = !!job.shootStartedAt;
+    const liveMinutes = running ? job.shootMinutes + Math.round((Date.now() - job.shootStartedAt) / 60000) : job.shootMinutes;
+    stopwatchBox.appendChild(el('span', { class: 'ltr-num', style: 'font-weight:700', text: liveMinutes + ' דק׳' }));
+    stopwatchBox.appendChild(el('button', { class: 'btn sm' + (running ? ' primary' : ''), onclick: () => {
+      if (running){ job.shootMinutes += Math.round((Date.now() - job.shootStartedAt) / 60000); job.shootStartedAt = 0; }
+      else job.shootStartedAt = Date.now();
+      if (!isNew) saveDB();
+      paintStopwatch();
+    } }, running ? '⏸ עצירה' : '▶ התחלת צילום'));
+    if (job.shootMinutes || running) stopwatchBox.appendChild(el('button', { class: 'btn sm ghost', onclick: () => {
+      job.shootMinutes = 0; job.shootStartedAt = 0; if (!isNew) saveDB(); paintStopwatch();
+    } }, '↺'));
+  };
+  paintStopwatch();
+
+  /* --- V4.6: רשימת ציוד לפי סוג עבודה (משויכת דרך שדה "סוג עבודה" בספריית הצ׳קליסטים) --- */
+  const equipBox = el('div');
+  const paintEquip = () => {
+    equipBox.innerHTML = '';
+    const lists = checklistsForKind(job.kind);
+    if (!lists.length){
+      equipBox.appendChild(el('div', { class: 'hint',
+        text: 'אין רשימת ציוד משויכת לסוג העבודה הזה. אפשר לשייך בספריית הצ׳קליסטים (שדה "סוג עבודה").' }));
+      return;
+    }
+    lists.forEach(cl => {
+      equipBox.appendChild(el('div', { class: 'wd-section-label', text: cl.name }));
+      cl.items.filter(x => (x || '').trim()).forEach(it => {
+        const checked = (job.equipChecked || []).includes(it);
+        equipBox.appendChild(el('label', { class: 'row', style: 'cursor:pointer' }, [
+          el('input', { type: 'checkbox', checked, onchange: e => {
+            job.equipChecked = job.equipChecked || [];
+            if (e.target.checked) job.equipChecked.push(it);
+            else job.equipChecked = job.equipChecked.filter(x => x !== it);
+            if (!isNew) saveDB();
+          } }),
+          el('span', { text: it })
+        ]));
+      });
+    });
+  };
+  paintEquip();
+  kind.addEventListener('input', paintEquip);
+  const photosSw = mkSwitch(job.photosUploaded, v => { job.photosUploaded = v; if (!isNew) saveDB(); });
+
   const waBtn = el('button', { class: 'btn sm ghost', title: 'שליחת תזכורת בוואטסאפ ללקוח', onclick: () => {
     const c = contactById(job.who);
     if (!c || !c.phone) return toast('לא נבחר לקוח עם טלפון');
@@ -7583,6 +7734,11 @@ function openJobEditor(job, after){
       el('div', { class: 'field' }, [ el('label', { text: 'שביעות רצון הלקוח' }),
         starPicker(() => job.rating, v => { job.rating = v; if (!isNew) saveDB(); }) ])
     ]),
+    el('div', { class: 'field-row' }, [
+      el('div', { class: 'field' }, [ el('label', { text: 'זמן צילום בפועל' }), stopwatchBox ]),
+      el('div', { class: 'field' }, [ el('label', { text: 'הועלו תמונות ללקוח' }), photosSw ])
+    ]),
+    el('div', { class: 'field' }, [ el('label', { text: '🎒 רשימת ציוד' }), equipBox ]),
     field('הערות', note)
   ], [
     el('button', { class: 'btn primary', onclick: () => {
@@ -7590,7 +7746,7 @@ function openJobEditor(job, after){
       // V4: יעד מסירה מחושב לבד לעבודה חדשה, כדי שלא יישכח
       if (!job.deliverBy && job.iso && DB.settings.deliveryDays)
         job.deliverBy = isoOf(addDays(fromISO(job.iso), DB.settings.deliveryDays));
-      if (isNew) DB.jobs.push(job);
+      if (isNew){ DB.jobs.push(job); logAudit('יצירה', 'עבודה', job.title); }
       syncFollowUps(); saveDB(); closeModal();
       if (after) after(); else renderAll(true);
       toast(isNew ? 'העבודה נוספה' : 'נשמר');
@@ -7777,6 +7933,15 @@ function businessOverview(){
       flags.push({ text: `📋 התאריך ${w.iso.split('-').reverse().join('/')} פנוי — ${w.name || ''} ממתין/ה לו`,
         onclick: () => { closeModal(); openWaitlist(); } });
   });
+  DB.jobs.filter(j => (j.status === 'delivered' || j.status === 'paid') && !j.rating && j.iso &&
+    Math.round((fromISO(today) - fromISO(j.iso)) / 864e5) >= (DB.settings.followUpDays || 14))
+    .slice(0, 3).forEach(j => flags.push({
+      text: `⭐ לבקש חוות דעת: ${j.title || 'עבודה'} (נמסרה, אין עדיין דירוג)`,
+      onclick: () => { closeModal(); openJobEditor(j); } }));
+  DB.jobs.filter(j => j.status === 'delivered' && !j.photosUploaded && j.iso && j.iso < today)
+    .slice(0, 3).forEach(j => flags.push({
+      text: `📤 תמונות לא הועלו ללקוח: ${j.title || 'עבודה'}`,
+      onclick: () => { closeModal(); openJobEditor(j); } }));
   recurringClientCandidates(21).slice(0, 3).forEach(r => flags.push({
     text: `🔁 לקוח חוזר: ${contactName(r.who) || 'לקוח'} — בשנה שעברה היה ב-${r.suggestedIso.split('-').reverse().join('/')} בקירוב, עדיין לא נקבע השנה`,
     onclick: () => { closeModal(); openClientCard(r.who); } }));
@@ -7944,6 +8109,75 @@ function downloadCSV(rows, name){
   const a = el('a', { href: URL.createObjectURL(blob), download: name });
   document.body.appendChild(a); a.click(); a.remove();
   toast('הקובץ הורד');
+}
+/** דוח שנתי לרואה חשבון — פירוט חודשי: הכנסות (עבודות ששולמו + כספים),
+    הוצאות, מע״מ שנגבה (מתוך מסמכים), ורווח נטו. גם על המסך וגם ל-CSV. */
+function annualAccountantData(year){
+  const months = Array.from({ length: 12 }, (_, i) => ({
+    m: i + 1, income: 0, expense: 0, vat: 0
+  }));
+  DB.finance.forEach(f => {
+    if (!f.iso || f.iso.slice(0, 4) !== String(year)) return;
+    const mi = Number(f.iso.slice(5, 7)) - 1;
+    if (f.kind === 'in') months[mi].income += Number(f.amount) || 0;
+    else months[mi].expense += Number(f.amount) || 0;
+  });
+  DB.jobs.forEach(j => {
+    if (!j.iso || j.iso.slice(0, 4) !== String(year) || !j.paid) return;
+    const mi = Number(j.iso.slice(5, 7)) - 1;
+    months[mi].income += Number(j.paid) || 0;
+  });
+  DB.docs.forEach(d => {
+    if (!d.iso || d.iso.slice(0, 4) !== String(year)) return;
+    const mi = Number(d.iso.slice(5, 7)) - 1;
+    months[mi].vat += docTotals(d).vat || 0;
+  });
+  return months;
+}
+function openAnnualAccountantReport(){
+  let year = new Date().getFullYear();
+  const body = el('div', { style: 'display:flex;flex-direction:column;gap:10px' });
+  const yearInp = el('input', { type: 'number', value: year, class: 'ltr-num', style: 'max-width:110px' });
+  const tableWrap = el('div', { class: 'imp-scroll' });
+  const MONTH_NAMES = GREG_MONTHS;
+  const draw = () => {
+    year = Number(yearInp.value) || year;
+    const rows = annualAccountantData(year);
+    let totIncome = 0, totExpense = 0, totVat = 0;
+    tableWrap.innerHTML = '';
+    tableWrap.appendChild(el('table', { class: 'imp-table' }, [
+      el('thead', {}, el('tr', {}, ['חודש', 'הכנסות', 'הוצאות', 'מע״מ שנגבה', 'רווח נטו'].map(t => el('th', { text: t })))),
+      el('tbody', {}, rows.map(r => {
+        totIncome += r.income; totExpense += r.expense; totVat += r.vat;
+        return el('tr', {}, [
+          el('td', { text: MONTH_NAMES[r.m - 1] }),
+          el('td', { class: 'd', text: money(r.income) }),
+          el('td', { class: 'd', text: money(r.expense) }),
+          el('td', { class: 'd', text: money(r.vat) }),
+          el('td', { class: 'd', style: 'font-weight:700', text: money(r.income - r.expense) })
+        ]);
+      }))
+    ]));
+    body.querySelector('.doc-total') && body.querySelector('.doc-total').remove();
+    body.appendChild(el('div', { class: 'doc-total' }, [
+      el('span', { text: 'סה״כ שנתי' }),
+      el('span', { class: 'money', html: `הכנסות ${money(totIncome)} · הוצאות ${money(totExpense)} · מע״מ ${money(totVat)} · ` +
+        `<b>נטו ${money(totIncome - totExpense)}</b>` })
+    ]));
+  };
+  yearInp.addEventListener('change', draw);
+  body.appendChild(field('שנה', yearInp));
+  body.appendChild(tableWrap);
+  draw();
+  openModal('דוח שנתי לרואה חשבון', body, [
+    el('button', { class: 'btn primary', onclick: () => {
+      const rows = annualAccountantData(year);
+      const csv = [['חודש', 'הכנסות', 'הוצאות', 'מע״מ שנגבה', 'רווח נטו']];
+      rows.forEach(r => csv.push([MONTH_NAMES[r.m - 1], r.income, r.expense, r.vat, r.income - r.expense]));
+      downloadCSV(csv, `דוח-שנתי-${year}.csv`);
+    } }, '⬇ ייצוא CSV'),
+    el('button', { class: 'btn', onclick: closeModal }, 'סגירה')
+  ]);
 }
 function exportFinanceCSV(fromIso, toIso){
   const rows = [['תאריך', 'סוג', 'סכום', 'תיאור', 'לקוח']];
@@ -8443,6 +8677,7 @@ function commandList(){
     { ic: '📈', nm: 'צנרת פניות',               grp: 'עסק',    run: openLeads },
     { ic: '🏷', nm: 'מחירון ומקבצים',           grp: 'עסק',    run: openPriceList },
     { ic: '💹', nm: 'תזרים 12 חודשים',          grp: 'עסק',    run: openCashflow },
+    { ic: '🧾', nm: 'דוח שנתי לרואה חשבון',      grp: 'עסק',    run: openAnnualAccountantReport },
     { ic: '🧮', nm: 'רווחיות לעבודה',           grp: 'ניתוח',  run: openProfitability },
     { ic: '🤝', nm: 'צוות — צלם שני ועוזרים',   grp: 'עסק',    run: openCrew },
     { ic: '🌡', nm: 'עומס עונתי',               grp: 'ניתוח',  run: openSeasonMap },
@@ -11995,6 +12230,9 @@ function openChecklists(){
     DB.checklists.forEach(cl => {
       const nm = el('input', { class: 'line-input', type: 'text', value: cl.name, placeholder: 'שם הרשימה' });
       nm.addEventListener('input', () => { cl.name = nm.value; saveDB(); });
+      const grp = el('input', { class: 'line-input', type: 'text', value: cl.group || '', style: 'max-width:150px',
+        placeholder: 'סוג עבודה (לשיוך אוטומטי)' });
+      grp.addEventListener('input', () => { cl.group = grp.value; saveDB(); });
       const items = el('div', { style: 'display:flex;flex-direction:column;gap:4px;padding-inline-start:10px' });
       const drawItems = () => {
         items.innerHTML = '';
@@ -12009,7 +12247,7 @@ function openChecklists(){
       };
       drawItems();
       list.appendChild(el('div', { class: 'cl-card' }, [
-        el('div', { class: 'row' }, [ nm,
+        el('div', { class: 'row' }, [ nm, grp,
           el('button', { class: 'btn sm', title: 'הוספה כמשימות ליום שנבחר',
             onclick: () => applyChecklist(cl) }, '→ ליום'),
           el('button', { class: 'del', onclick: () => {
@@ -12028,6 +12266,13 @@ function openChecklists(){
   openModal('ספריית צ׳קליסטים', body, [ el('button', { class: 'btn', onclick: closeModal }, 'סגירה') ]);
 }
 
+/** צ׳קליסטים מהספרייה ששויכו לסוג עבודה זה (שדה "group") — לשימוש כרשימת ציוד
+    שנפתחת אוטומטית עם קביעת עבודה מאותו סוג */
+function checklistsForKind(kind){
+  const k = String(kind || '').trim().toLowerCase();
+  if (!k) return [];
+  return DB.checklists.filter(cl => cl.group && k.includes(String(cl.group).trim().toLowerCase()));
+}
 function applyChecklist(cl){
   const iso = isoOf(State.cursor);
   const items = cl.items.filter(x => (x || '').trim());
@@ -12168,6 +12413,20 @@ function wireQuickAddButton(){
 }
 
 /* ==================== 22. מצב תצוגה לקיר הסטודיו ==================== */
+/** שעת זהב ושעה כחולה — קירוב סטנדרטי בצילום: שעת זהב = שעה לפני השקיעה/אחרי הזריחה,
+    שעה כחולה = כ-10 עד 40 דקות אחרי השקיעה / לפני הזריחה */
+function photoHours(z){
+  if (!z || !z.sunrise || !z.sunset) return null;
+  const fmt = m => { m = ((m % 1440) + 1440) % 1440; return pad2(Math.floor(m / 60)) + ':' + pad2(m % 60); };
+  const sr = toMin(z.sunrise), ss = toMin(z.sunset);
+  if (sr == null || ss == null) return null;
+  return {
+    goldenAM: [fmt(sr), fmt(sr + 60)],
+    blueAM: [fmt(sr - 40), fmt(sr - 10)],
+    goldenPM: [fmt(ss - 60), fmt(ss)],
+    bluePM: [fmt(ss + 10), fmt(ss + 40)]
+  };
+}
 const Wall = {
   timer: null,
   open(){
@@ -12234,9 +12493,21 @@ const Wall = {
       ]));
     }
     const z = zmanimForISO(iso);
-    if (z && z.sunset)
-      box.appendChild(el('div', { class: 'wall-foot',
-        html: `זריחה <b dir="ltr">${z.sunrise || '—'}</b> · שקיעה <b dir="ltr">${z.sunset}</b>` }));
+    const w = wxFor(iso);
+    const foot = el('div', { class: 'wall-foot-wrap' });
+    if (z && z.sunset){
+      foot.appendChild(el('div', { class: 'wall-foot',
+        html: `זריחה <b dir="ltr">${z.sunrise || '—'}</b> · שקיעה <b dir="ltr">${z.sunset}</b>` +
+              (w ? ` · ${(WX_CODES[w.code] || ['·',''])[0]} <b dir="ltr">${w.hi}°/${w.lo}°</b>` +
+                   (w.rain != null ? ` · גשם ${w.rain}%` : '') : '') }));
+      const ph = photoHours(z);
+      if (ph) foot.appendChild(el('div', { class: 'wall-foot', style: 'font-size:.86em;opacity:.85',
+        html: `📸 שעת זהב בוקר <b dir="ltr">${ph.goldenAM[0]}–${ph.goldenAM[1]}</b> · ` +
+              `שעה כחולה בוקר <b dir="ltr">${ph.blueAM[0]}–${ph.blueAM[1]}</b><br>` +
+              `שעת זהב ערב <b dir="ltr">${ph.goldenPM[0]}–${ph.goldenPM[1]}</b> · ` +
+              `שעה כחולה ערב <b dir="ltr">${ph.bluePM[0]}–${ph.bluePM[1]}</b>` }));
+    }
+    box.appendChild(foot);
   }
 };
 
@@ -12259,13 +12530,29 @@ function applyAutoDark(){
 
 /* ==================== 24. תצוגה מפוצלת ==================== */
 const Split = {
-  on: false, iso: null,
+  on: false, iso: null, mode: 'day',
   toggle(){
     this.on = !this.on;
     if (this.on && !this.iso) this.iso = isoOf(addDays(State.cursor, 1));
     document.body.classList.toggle('split-on', this.on);
     renderAll(true);
     toast(this.on ? 'תצוגה מפוצלת פעילה' : 'תצוגה מפוצלת כבויה');
+  },
+  /** רצועת שבוע מצומצמת — כמות פריטים לכל יום, לחיצה קופצת לפירוט */
+  renderWeekStrip(pane){
+    const sun = startOfWeek(State.cursor);
+    const strip = el('div', { class: 'split-week-strip' });
+    for (let i = 0; i < 7; i++){
+      const d = addDays(sun, i), iso = isoOf(d), rec = DB.days[iso] || {};
+      const n = jobsForISO(iso).length + (rec.appts || []).filter(a => a && (a.what || '').trim()).length;
+      strip.appendChild(el('button', { class: 'split-week-cell' + (sameISO(d, State.cursor) ? ' cur' : ''),
+        onclick: () => { State.cursor = d; renderAll(true); } }, [
+        el('div', { class: 'dn', text: DOW_SHORT[d.getDay()] }),
+        el('div', { class: 'num', text: String(d.getDate()) }),
+        n ? el('div', { class: 'cnt', text: String(n) }) : null
+      ]));
+    }
+    pane.appendChild(strip);
   },
   render(host){
     if (!this.on) return;
@@ -12274,12 +12561,16 @@ const Split = {
     const pane = el('aside', { class: 'split-pane' });
     const pick = el('input', { type: 'date', value: iso });
     pick.addEventListener('change', () => { this.iso = pick.value; renderAll(true); });
+    const modeBtn = el('button', { class: 'btn sm ghost', title: 'מעבר בין יום בודד לרצועת שבוע',
+      onclick: () => { this.mode = this.mode === 'day' ? 'week' : 'day'; renderAll(true); } },
+      this.mode === 'day' ? '📆 שבוע' : '📄 יום');
     pane.appendChild(el('div', { class: 'split-head' }, [
-      el('div', {}, [ el('b', { text: DOW_LONG[d.getDay()] }),
-                      el('div', { class: 'hint', text: h.short }) ]),
-      pick,
+      el('div', {}, [ el('b', { text: this.mode === 'day' ? DOW_LONG[d.getDay()] : 'השבוע' }),
+                      el('div', { class: 'hint', text: this.mode === 'day' ? h.short : '' }) ]),
+      this.mode === 'day' ? pick : null, modeBtn,
       el('button', { class: 'btn sm ghost', title: 'סגירה', onclick: () => this.toggle() }, '✕')
     ]));
+    if (this.mode === 'week'){ this.renderWeekStrip(pane); host.appendChild(pane); return; }
 
     const sec = (title, kids) => pane.appendChild(el('div', { class: 'split-sec' },
       [ el('h5', { text: title }) ].concat(kids.length ? kids : [ el('div', { class: 'empty-note', text: '—' }) ])));
@@ -12450,7 +12741,7 @@ function openJobsImportDialog(rows){
       const iso = normDate(g('iso'));
       if (!title && !iso) return;
       const exists = DB.jobs.some(j => j.title === title && j.iso === iso);
-      plan.push({ title: title || '(ללא שם)', iso, time: g('time'), kind: g('kind'),
+      plan.push({ title: title || '(ללא שם)', iso, time: g('time'), kind: g('kind') || guessJobKind(title),
                   client: g('client'), where: g('where'),
                   price: num(g('price')), paid: num(g('paid')), note: g('note'), exists });
     });
@@ -13065,6 +13356,58 @@ const Sync = {
 
 /* ---------------- מסך ההגדרה ---------------- */
 /** מסך הניהול — רשימת המחשבים המוכרים. תומך במספר בלתי מוגבל (בית, סטודיו, ...) */
+/** מסך "המחשב הזה" בגרסת שולחן העבודה — כתובת/אסימון להוספה בטלפון,
+    ופיד יומן חי (webcal) להרשמה חד-פעמית מגוגל קלנדר / יומן אייפון,
+    כך שאין יותר צורך לחזור ולייבא קובץ ICS ידנית בכל פעם. */
+async function openDesktopSyncPanel(){
+  const body = el('div', { style: 'display:flex;flex-direction:column;gap:12px' });
+  const box = el('div', { class: 'hint', text: 'טוען…' });
+  body.appendChild(box);
+  openModal('סנכרון ברשת המקומית — המחשב הזה', body,
+    [ el('button', { class: 'btn primary', onclick: closeModal }, 'סגירה') ]);
+
+  const s = await window.plannerDesktop.syncStatus();
+  box.innerHTML = '';
+  const enabledSw = mkSwitch(s.enabled, async v => {
+    await (v ? window.plannerDesktop.syncStart() : window.plannerDesktop.syncStop());
+    openDesktopSyncPanel();
+  });
+  box.appendChild(setRow('סנכרון פעיל', enabledSw));
+  if (!s.urls.length){
+    box.appendChild(el('div', { class: 'hint', text: '⚠ לא נמצאה רשת מקומית פעילה כרגע.' }));
+  } else {
+    box.appendChild(el('div', { class: 'field' }, [
+      el('label', { text: 'כתובת (להוספה בטלפון/טאבלט ← סנכרון עם מחשבים)' }),
+      ...s.urls.map(u => el('div', { class: 'row' }, [
+        el('input', { class: 'line-input ltr-num', value: u, readOnly: true }),
+        el('button', { class: 'btn sm', onclick: () => { navigator.clipboard.writeText(u); toast('הכתובת הועתקה'); } }, '📋')
+      ]))
+    ]));
+    box.appendChild(el('div', { class: 'field' }, [
+      el('label', { text: 'אסימון' }),
+      el('div', { class: 'row' }, [
+        el('input', { class: 'line-input ltr-num', value: s.token, readOnly: true }),
+        el('button', { class: 'btn sm', onclick: () => { navigator.clipboard.writeText(s.token); toast('האסימון הועתק'); } }, '📋')
+      ])
+    ]));
+    const icsUrl = s.urls[0].replace(/\/$/, '') + '/calendar.ics?token=' + encodeURIComponent(s.token);
+    box.appendChild(el('div', { class: 'field' }, [
+      el('label', { text: '🌐 פיד יומן חי — הרשמה חד-פעמית בגוגל קלנדר / יומן אייפון' }),
+      el('div', { class: 'row' }, [
+        el('input', { class: 'line-input ltr-num', value: icsUrl, readOnly: true }),
+        el('button', { class: 'btn sm', onclick: () => { navigator.clipboard.writeText(icsUrl); toast('הכתובת הועתקה'); } }, '📋')
+      ]),
+      el('div', { class: 'hint', text: 'גוגל קלנדר: הגדרות ← הוספת יומן ← מ-URL, והדבק כאן. ' +
+        'לאחר מכן כל פגישה/עבודה בדשבורד תופיע ביומן לבד — בלי לייצא ולייבא קובץ שוב. ' +
+        'עובד רק כשהטלפון/המחשב שמבקש את הפיד נמצא באותה רשת מקומית כמו המחשב הזה.' })
+    ]));
+    box.appendChild(el('button', { class: 'btn sm', onclick: async () => {
+      if (!confirm('ליצור אסימון חדש? כל מכשיר שכבר מחובר יצטרך את האסימון החדש.')) return;
+      await window.plannerDesktop.syncNewToken(); openDesktopSyncPanel();
+    } }, '🔑 יצירת אסימון חדש'));
+  }
+}
+
 function openSyncSetup(httpsWarning){
   const body = el('div', { style: 'display:flex;flex-direction:column;gap:12px' });
 
