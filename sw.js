@@ -1,6 +1,6 @@
 /* Service Worker — פתיחה אופליין מלאה של המתכנן.
    נתוני Hebcal ומזג האוויר נשמרים במטמון של האפליקציה עצמה (localStorage), לא כאן. */
-const VERSION = 'v4.5.1';
+const VERSION = 'v4.5.2';
 const SHELL_CACHE = 'planner-shell-' + VERSION;
 const FONT_CACHE  = 'planner-fonts-' + VERSION;
 

@@ -3793,6 +3793,18 @@ function renderWeek(){
     }
     body.appendChild(el('div', { class: 'wd-section-label', text: 'לוח זמנים' }));
     const slotsWrap = el('div', { style: 'position:relative' });
+    /* פגישות ועבודות משובצות לשעה שלהן, כדי שמה שיובא מהיומן ייראה בלוח עצמו — כמו בתצוגת יום */
+    const wTimed = [];
+    dayAppts.forEach(a => {
+      if (toMin(a.time) != null)
+        wTimed.push({ min: toMin(a.time), label: a.what, sub: [a.where, a.end ? 'עד ' + a.end : ''].filter(Boolean).join(' · '),
+                      note: a.note, kind: 'appt' });
+    });
+    dayJobs.forEach(j => {
+      if (toMin(j.time) != null)
+        wTimed.push({ min: toMin(j.time), label: '📷 ' + (j.title || ''), sub: contactName(j.who), kind: 'job' });
+    });
+    const wStep = S.slotMinutes;
     slots.forEach(t => {
       const handle = el('span', { class: 'drag-handle', text: '⠿', title: 'גרירה' });
       const srow = el('div', { class: 'wd-slot' }, [
@@ -3812,6 +3824,19 @@ function renderWeek(){
         saveDB(); renderAll(true);
       });
       slotsWrap.appendChild(srow);
+      const slotMin = toMin(t);
+      wTimed.filter(x => x.min >= slotMin && x.min < slotMin + wStep).forEach(x => slotsWrap.appendChild(
+        el('div', { class: 'wd-slot' }, [
+          el('span', { class: 't', text: '' }),
+          el('span', {
+            style: `flex:1;font-size:.78em;padding:2px 8px;border-radius:7px;` +
+                   `background:${x.kind === 'job' ? 'var(--c5)' : 'var(--accent-soft)'};` +
+                   `color:${x.kind === 'job' ? 'var(--c5i)' : 'var(--accent-ink)'}`,
+            text: pad2(Math.floor(x.min / 60)) + ':' + pad2(x.min % 60) + ' · ' + x.label + (x.sub ? ' · ' + x.sub : ''),
+            title: [x.label, x.sub, x.note].filter(Boolean).join('\n')
+          })
+        ])
+      ));
     });
     if (S.showNowLine && sameISO(d, new Date())) attachNowLine(slotsWrap);
     body.appendChild(slotsWrap);
