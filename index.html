@@ -1039,6 +1039,14 @@ body.shabbat-mode .pomo{ display: none !important; }
 .imp-stats{ display: flex; gap: 8px; flex-wrap: wrap; }
 .imp-stats .stat-box{ flex: 1 1 100px; }
 
+/* V4.2: רצועת סקירה בראש מסך הסטודיו */
+.biz-overview{ display: flex; flex-direction: column; gap: 9px; margin-bottom: 4px; }
+.biz-overview .stat-box.bad .v{ color: var(--danger); }
+.biz-flags{ display: flex; flex-direction: column; gap: 5px; }
+.biz-flag{ background: var(--c5, #f0e0c0); color: var(--c5i, #5a4520); border-radius: 9px;
+  padding: 7px 11px; font-size: .85em; cursor: pointer; }
+.biz-flag:hover{ filter: brightness(1.05); }
+
 /* ==========================================================================
    V3 — עסק, ניתוח, קלט מהיר וכלי תפעול
    ========================================================================== */
@@ -1459,9 +1467,10 @@ body.compact .area{ min-height:44px; }
   text-align:center; font-weight:700; }
 
 /* 33. סנכרון */
-.sync-chip{ cursor:pointer; }
 .sync-chip.ok{ background:var(--accent-soft); color:var(--accent-ink); }
 .sync-chip.bad{ background:var(--danger); color:#fff; }
+.sync-chip.spinning{ animation:sync-spin 1s linear infinite; }
+@keyframes sync-spin{ to{ transform:rotate(360deg); } }
 .sync-warn{ background:var(--c5,#f0e0c0); color:var(--c5i,#5a4520); padding:11px 13px; border-radius:11px;
   display:flex; flex-direction:column; gap:5px; font-size:.86em; line-height:1.55; }
 .cf-row{ border:1px solid var(--line); border-radius:11px; padding:9px 11px; }
@@ -1730,7 +1739,7 @@ body.sidenav-on .app-bar{ padding-inline-end: 222px; }
 
 <header class="app-bar no-print">
   <div class="brand">
-    <b id="brandName">מתכנן</b><span>V4.1 · יומי · שבועי · חודשי · שנתי</span>
+    <b id="brandName">מתכנן</b><span>V4.2 · יומי · שבועי · חודשי · שנתי</span>
   </div>
 
   <div class="tabs" role="tablist" id="tabs">
@@ -1761,7 +1770,7 @@ body.sidenav-on .app-bar{ padding-inline-end: 222px; }
   <div class="nav-group">
     <button class="profile-chip" id="profileChip" title="החלפת פרופיל">אישי</button>
     <span class="chip muted" id="syncChip" title="מצב נתוני Hebcal">•</span>
-    <span class="chip sync-chip" id="syncChip2" title="סנכרון ברשת המקומית" hidden>•</span>
+    <button class="btn icon sync-chip" id="syncChip2" title="סנכרון ברשת המקומית — לחיצה לסנכרון מיידי" hidden>🔄</button>
     <button class="btn icon" id="btnQuickAdd" title="הוספה מהירה בעברית (Ctrl+N)">⚡</button>
     <button class="btn icon" id="btnLayoutEdit" title="מצב עריכת פריסה — גרירת בלוקים (E)">✋</button>
     <button class="btn icon" id="btnWall" title="מצב קיר הסטודיו (W)">🖥</button>
@@ -7369,6 +7378,54 @@ function timeReport(fromIso, toIso){
 }
 
 /* ======================= מרכז הסטודיו: עבודות, כספים, שעות ======================= */
+/** רצועת סקירה בראש מסך הסטודיו — המספרים שחשוב לראות בלי לחפש בין הלשוניות */
+function businessOverview(){
+  const box = el('div', { class: 'biz-overview' });
+  const today = todayISO();
+  const mFrom = today.slice(0, 8) + '01';
+
+  const openJobs = DB.jobs.filter(j => j.status !== 'paid');
+  const owedTotal = DB.jobs.reduce((s, j) => s + Math.max(0, Number(j.price || 0) - Number(j.paid || 0)), 0);
+  const monthIncome = DB.jobs.filter(j => j.iso && j.iso >= mFrom)
+                             .reduce((s, j) => s + Number(j.paid || 0), 0) +
+                       DB.finance.filter(f => f.kind === 'in' && f.iso >= mFrom).reduce((s, f) => s + Number(f.amount || 0), 0);
+  const weekTo = isoOf(addDays(new Date(), 7));
+  const jobsThisWeek = DB.jobs.filter(j => j.iso && j.iso >= today && j.iso <= weekTo).length;
+  const ls = leadStats();
+  const openLeadsCount = DB.leads.filter(l => l.stage !== 'won' && l.stage !== 'lost').length;
+  const dueDeliv = deliveriesDue(9999);
+  const lateDeliv = dueDeliv.filter(d => d.late);
+
+  const stat = (v, k, cls, onclick) => box.stats.appendChild(
+    el('div', { class: 'stat-box' + (cls ? ' ' + cls : ''), onclick, style: onclick ? 'cursor:pointer' : '' },
+      [ el('div', { class: 'v', text: v }), el('div', { class: 'k', text: k }) ]));
+  box.stats = el('div', { class: 'imp-stats' });
+  stat(money(monthIncome), 'הכנסה החודש', 'good');
+  stat(money(owedTotal), 'יתרה לגבייה', owedTotal ? 'bad' : '', () => { closeModal(); openBusiness('jobs'); });
+  stat(String(jobsThisWeek), 'עבודות השבוע', '');
+  if (openLeadsCount) stat(String(openLeadsCount), 'פניות פתוחות', '', () => { closeModal(); openLeads(); });
+  if (ls.value) stat(money(ls.value), 'שווי פניות שנסגרו', 'good');
+  if (lateDeliv.length) stat(String(lateDeliv.length), 'מסירות באיחור', 'bad', () => { closeModal(); openBusiness('jobs'); });
+  box.appendChild(box.stats);
+
+  /* שורת "טעון תשומת לב" — רק אם יש מה להראות, כדי לא להציף כשהכול תקין */
+  const flags = [];
+  lateDeliv.slice(0, 3).forEach(d => flags.push({
+    text: `⏰ באיחור במסירה: ${d.job.title || 'עבודה'} (${Math.abs(d.days)} ימים)`,
+    onclick: () => { closeModal(); openJobEditor(d.job); } }));
+  DB.leads.filter(l => l.stage !== 'won' && l.stage !== 'lost').forEach(l => {
+    const ageDays = l.iso ? Math.round((fromISO(today) - fromISO(l.iso)) / 864e5) : 0;
+    if (ageDays >= 3) flags.push({
+      text: `📈 פנייה ממתינה ${ageDays} ימים: ${l.name || 'ללא שם'}`,
+      onclick: () => { closeModal(); openLeadEditor(l, openLeads); } });
+  });
+  if (flags.length){
+    box.appendChild(el('div', { class: 'biz-flags' },
+      flags.slice(0, 4).map(f => el('div', { class: 'biz-flag', onclick: f.onclick }, f.text))));
+  }
+  return box;
+}
+
 function openBusiness(tab){
   let active = tab || 'jobs';
   const tabs = el('div', { class: 'view-tabs' });
@@ -7508,7 +7565,7 @@ function openBusiness(tab){
     else drawTime();
   };
   draw();
-  openModal('הסטודיו', [ tabs, pane ], [
+  openModal('הסטודיו', [ businessOverview(), tabs, pane ], [
     el('button', { class: 'btn', title: 'ייבוא עבודות מקובץ אקסל או CSV',
       onclick: importJobsFile }, '📊 ייבוא מקובץ'),
     el('button', { class: 'btn', onclick: () => { closeModal(); renderAll(true); } }, 'סגירה') ]);
@@ -12239,24 +12296,33 @@ const Sync = {
     applyTheme(); renderAll(true);
   },
 
+  /** הכפתור נשאר תמיד עם אייקון 🔄 — הטקסט זז ל-title, והמצב מסומן בצבע ובסיבוב */
   paintChip(text){
     const chip = $('#syncChip2');
     if (!chip) return;
     const c = this.cfg();
     chip.hidden = false;
-    chip.textContent = text || (c.lastAt ? 'מסונכרן' : 'לא מוגדר');
-    chip.className = 'chip sync-chip' +
+    const spinning = text === 'שולח…' || text === 'בודק…';
+    chip.className = 'btn icon sync-chip' +
+      (spinning ? ' spinning' : '') +
       (/שגיאה|אין חיבור|סתירות/.test(text || '') ? ' bad' : /מסונכרן/.test(text || '') ? ' ok' : '');
-    chip.title = c.lastAt ? 'סנכרון אחרון: ' + new Date(c.lastAt).toLocaleString('he-IL') : 'לא סונכרן עדיין';
+    const last = c.lastAt ? 'סנכרון אחרון: ' + new Date(c.lastAt).toLocaleString('he-IL') : 'טרם סונכרן';
+    chip.title = c.token
+      ? (text ? text + ' · ' + last : 'לחיצה לסנכרון מיידי · ' + last)
+      : 'לחיצה להגדרת סנכרון עם המחשב';
   },
 
   start(){
+    // המחשב הוא השרת של הסנכרון, לא לקוח שלו — אין צורך בכפתור או בבדיקות תקופתיות בגרסתו
+    if (typeof DESKTOP !== 'undefined' && DESKTOP){
+      if (window.plannerDesktop.onSyncChanged)
+        window.plannerDesktop.onSyncChanged(() => {
+          loadDB(); renderAll(true); toast('הנתונים עודכנו ממכשיר אחר');
+        });
+      return;
+    }
     const c = this.cfg();
     this.paintChip();
-    if (typeof DESKTOP !== 'undefined' && DESKTOP && window.plannerDesktop.onSyncChanged)
-      window.plannerDesktop.onSyncChanged(() => {
-        loadDB(); renderAll(true); toast('הנתונים עודכנו ממכשיר אחר');
-      });
     if (!c.auto) return;
     clearInterval(this.timer);
     this.timer = setInterval(() => this.run(), Math.max(1, c.everyMin) * 60000);
