@@ -1473,6 +1473,10 @@ body.compact .area{ min-height:44px; }
 @keyframes sync-spin{ to{ transform:rotate(360deg); } }
 .sync-warn{ background:var(--c5,#f0e0c0); color:var(--c5i,#5a4520); padding:11px 13px; border-radius:11px;
   display:flex; flex-direction:column; gap:5px; font-size:.86em; line-height:1.55; }
+.sync-remote-row{ display:flex; align-items:center; gap:8px; padding:8px 11px; border:1px solid var(--line);
+  border-radius:11px; }
+.sync-remote-row .ttl{ font-weight:700; font-size:.9em; }
+.sync-remote-row .meta{ font-size:.78em; color:var(--ink-soft); }
 .cf-row{ border:1px solid var(--line); border-radius:11px; padding:9px 11px; }
 .cf-head{ font-weight:700; font-size:.9em; margin-bottom:7px; }
 .cf-opts{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:7px; }
@@ -1739,7 +1743,7 @@ body.sidenav-on .app-bar{ padding-inline-end: 222px; }
 
 <header class="app-bar no-print">
   <div class="brand">
-    <b id="brandName">מתכנן</b><span>V4.2 · יומי · שבועי · חודשי · שנתי</span>
+    <b id="brandName">מתכנן</b><span>V4.3 · יומי · שבועי · חודשי · שנתי</span>
   </div>
 
   <div class="tabs" role="tablist" id="tabs">
@@ -4327,12 +4331,12 @@ function renderSettings(){
     'מאתר פגישות כפולות, שיוכים שבורים ורשומות ריקות'));
   /* --- V4.1: סנכרון ברשת המקומית (בגרסת המחשב יש בלוק משלו) --- */
   if (!(typeof DESKTOP !== 'undefined' && DESKTOP)){
-    const sc = Sync.cfg();
-    gS.appendChild(setRow('סנכרון עם המחשב',
+    const remotes = Sync.remotes();
+    gS.appendChild(setRow('סנכרון עם מחשבים',
       el('button', { class: 'btn sm', onclick: () => { closeDrawer(); openSyncSetup(); } },
-        sc.token ? 'הגדרות' : 'הגדרה'),
-      sc.lastAt ? 'סנכרון אחרון: ' + new Date(sc.lastAt).toLocaleString('he-IL')
-                : 'מסנכרן עם גרסת המחשב כשאתה ברשת הביתית'));
+        remotes.length ? 'ניהול (' + remotes.length + ')' : 'הוספה'),
+      remotes.length ? remotes.map(r => r.name || 'מחשב').join(' · ')
+                     : 'הוסף מחשב לכל רשת קבועה — למשל בית וסטודיו'));
   }
   gS.appendChild(setRow('כל כמה זמן',
     mkSelect([[3, '3 שעות'], [6, '6 שעות'], [12, '12 שעות'], [24, 'יממה']], S.backupEveryHours,
@@ -12006,53 +12010,76 @@ function onThisDayCard(iso){
 }
 
 /* ==========================================================================
-   33. סנכרון ברשת המקומית
+   33. סנכרון ברשת המקומית — כמה מחשבים
    --------------------------------------------------------------------------
-   המחשב מריץ שרת קטן ברשת הביתית. כל מכשיר שמגיע אליו מסתנכרן איתו.
-   כשאין רשת — הכול נשמר מקומית וממשיך לעבוד, והסנכרון מתבצע בחזרה הביתה.
+   כל מחשב (למשל בית וסטודיו) מריץ שרת קטן ברשת שלו. המכשיר הנייד מחזיק
+   רשימת מחשבים מוכרים, ובכל רגע מסתנכרן עם כל מי שנמצא איתו כרגע באותה
+   רשת — בלי לדעת איפה אתה, ובלי שהמחשבים צריכים לדבר ביניהם בכלל.
+   המחשבים עצמם אף פעם לא מתקשרים זה עם זה; המכשיר הנייד הוא ש"נוסע" ביניהם
+   ומעביר את השינויים הלאה בפעם הבאה שהוא נפגש עם המחשב השני.
 
-   המיזוג הוא מיזוג-שלושה: משווים את המצב שלי ואת המצב שבמחשב מול
-   **תמונת המצב מהסנכרון האחרון**. כך יודעים מי שינה מה:
-     · רק אני שיניתי       ⟵ נשמר שלי
-     · רק המחשב שינה       ⟵ נלקח משם
+   המיזוג הוא מיזוג-שלושה, **בנפרד לכל מחשב**: משווים את המצב שלי ואת המצב
+   שבמחשב מול תמונת המצב מהסנכרון האחרון *מול אותו מחשב בדיוק*. כך יודעים
+   מי שינה מה:
+     · רק אני שיניתי        ⟵ נשמר שלי
+     · רק המחשב הזה שינה    ⟵ נלקח משם
      · שנינו שינינו אותו דבר ⟵ סתירה, ואתה בוחר
-   בלי זה, "מי שכתב אחרון מנצח" היה מוחק עבודה בשקט.
+   תמונת בסיס אחת גלובלית הייתה שוברת את הזיהוי הזה ברגע שעוברים בין
+   מחשב לחברו — בדיוק כמו שקורה כשמערבבים שתי היסטוריות גיט לא קשורות.
    ========================================================================== */
-const SYNC_BASE_KEY = 'planner_syncbase_v1';
-const SYNC_CFG_KEY  = 'planner_synccfg_v1';
+const SYNC_CFG_KEY      = 'planner_synccfg_v2';   // { remotes: [ {id,name,host,port,token,auto,everyMin,lastAt} ] }
+const SYNC_BASE_KEY     = 'planner_syncbase_v2';  // { [remoteId]: bundleObj }
+const SYNC_CFG_KEY_OLD  = 'planner_synccfg_v1';   // גרסה קודמת — מחשב יחיד
+const SYNC_BASE_KEY_OLD = 'planner_syncbase_v1';
 
 const Sync = {
-  busy: false, lastTry: 0, timer: null,
+  busy: false, timer: null,
 
-  cfg(){
-    let c = {};
-    try { c = JSON.parse(localStorage.getItem(SYNC_CFG_KEY) || '{}'); } catch(e){}
-    return Object.assign({ host: '', port: 8790, token: '', auto: true, everyMin: 5, lastAt: 0 }, c);
+  /** רשימת המחשבים המוכרים. בקריאה הראשונה מהגרה הגדרת מחשב-יחיד ישנה, אם הייתה. */
+  remotes(){
+    try {
+      const c = JSON.parse(localStorage.getItem(SYNC_CFG_KEY) || 'null');
+      if (c && Array.isArray(c.remotes)) return c.remotes;
+    } catch(e){}
+    try {
+      const old = JSON.parse(localStorage.getItem(SYNC_CFG_KEY_OLD) || 'null');
+      if (old && old.host){
+        const oldBase = (() => { try { return JSON.parse(localStorage.getItem(SYNC_BASE_KEY_OLD) || 'null'); }
+                                  catch(e){ return null; } })();
+        const remote = { id: uid(), name: 'מחשב', host: old.host, port: old.port || 8790,
+                         token: old.token || '', auto: old.auto !== false, everyMin: old.everyMin || 5,
+                         lastAt: old.lastAt || 0 };
+        this.setRemotes([remote]);
+        if (oldBase) this.setBaseFor(remote.id, oldBase);
+        localStorage.removeItem(SYNC_CFG_KEY_OLD);
+        localStorage.removeItem(SYNC_BASE_KEY_OLD);
+        return [remote];
+      }
+    } catch(e){}
+    return [];
   },
-  setCfg(patch){
-    const c = Object.assign(this.cfg(), patch || {});
-    try { localStorage.setItem(SYNC_CFG_KEY, JSON.stringify(c)); } catch(e){}
-    return c;
+  setRemotes(list){ try { localStorage.setItem(SYNC_CFG_KEY, JSON.stringify({ remotes: list })); } catch(e){} },
+  addRemote(r){ const list = this.remotes(); list.push(r); this.setRemotes(list); return r; },
+  updateRemote(id, patch){
+    const list = this.remotes();
+    const i = list.findIndex(x => x.id === id);
+    if (i >= 0) list[i] = Object.assign({}, list[i], patch);
+    this.setRemotes(list);
   },
-  base(){
-    try { const raw = localStorage.getItem(SYNC_BASE_KEY); return raw ? JSON.parse(raw) : null; } catch(e){ return null; }
-  },
-  setBase(obj){
-    try { localStorage.setItem(SYNC_BASE_KEY, JSON.stringify(obj)); } catch(e){ /* אחסון מלא — המיזוג הבא ישאל יותר */ }
+  removeRemote(id){
+    this.setRemotes(this.remotes().filter(x => x.id !== id));
+    const all = this.allBases(); delete all[id]; this.setAllBases(all);
   },
 
-  /** הכתובת של המחשב. כשהדף מוגש מהמחשב עצמו — זו אותה כתובת. */
-  origin(){
-    const c = this.cfg();
-    if (c.host) return `http://${c.host}:${c.port}`;
-    if (location.protocol === 'http:' && location.hostname && location.hostname !== 'localhost')
-      return location.origin;     // הדף הוגש מהמחשב — מסתנכרנים מולו
-    return '';
-  },
+  allBases(){ try { return JSON.parse(localStorage.getItem(SYNC_BASE_KEY) || '{}'); } catch(e){ return {}; } },
+  setAllBases(obj){ try { localStorage.setItem(SYNC_BASE_KEY, JSON.stringify(obj)); } catch(e){} },
+  baseFor(id){ return this.allBases()[id] || null; },
+  setBaseFor(id, obj){ const all = this.allBases(); all[id] = obj; this.setAllBases(all); },
 
-  async ping(originOverride){
-    const o = originOverride || this.origin();
-    if (!o) return null;
+  originFor(remote){ return `http://${remote.host}:${remote.port}`; },
+
+  async pingRemote(remote){
+    const o = this.originFor(remote);
     try {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), 2500);
@@ -12064,26 +12091,24 @@ const Sync = {
     } catch(e){ return null; }
   },
 
-  /** האם החסימה של הדפדפן תמנע מאיתנו בכלל להגיע למחשב */
-  blockedByHttps(){
-    return location.protocol === 'https:' && !/^https:/.test(this.origin() || 'http:');
-  },
+  /** https חוסם כל פנייה ל-http פרטי, לא משנה לאיזה מחשב */
+  blockedByHttps(){ return location.protocol === 'https:'; },
 
-  async pull(){
-    const c = this.cfg(), o = this.origin();
-    const r = await fetch(`${o}/sync/pull?token=${encodeURIComponent(c.token)}`, { cache: 'no-store' });
+  async pullFrom(remote){
+    const o = this.originFor(remote);
+    const r = await fetch(`${o}/sync/pull?token=${encodeURIComponent(remote.token)}`, { cache: 'no-store' });
     const j = await r.json();
-    if (!j.ok) throw new Error(j.error || 'שגיאה בקריאה מהמחשב');
+    if (!j.ok) throw new Error(j.error || ('שגיאה בקריאה מ' + (remote.name || 'המחשב')));
     return j.bundle;
   },
-  async push(bundle){
-    const c = this.cfg(), o = this.origin();
-    const r = await fetch(`${o}/sync/push?token=${encodeURIComponent(c.token)}`, {
+  async pushTo(remote, bundle){
+    const o = this.originFor(remote);
+    const r = await fetch(`${o}/sync/push?token=${encodeURIComponent(remote.token)}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ bundle })
     });
     const j = await r.json();
-    if (!j.ok) throw new Error(j.error || 'שגיאה בכתיבה למחשב');
+    if (!j.ok) throw new Error(j.error || ('שגיאה בכתיבה ל' + (remote.name || 'המחשב')));
     return j;
   },
 
@@ -12095,7 +12120,8 @@ const Sync = {
       for (let i = 0; i < localStorage.length; i++){
         const k = localStorage.key(i);
         if (k && k.indexOf('planner_') === 0 &&
-            k !== SYNC_BASE_KEY && k !== SYNC_CFG_KEY && k !== 'planner_wx_v1') keys.push(k);
+            k !== SYNC_BASE_KEY && k !== SYNC_CFG_KEY &&
+            k !== SYNC_BASE_KEY_OLD && k !== SYNC_CFG_KEY_OLD && k !== 'planner_wx_v1') keys.push(k);
       }
     } catch(e){}
     Array.from(new Set(keys)).forEach(k => { const v = localStorage.getItem(k); if (v != null) out[k] = v; });
@@ -12242,52 +12268,39 @@ const Sync = {
     return bits.join(' · ') || '—';
   },
 
-  /* ---------------- ההרצה ---------------- */
-  async run(opts){
+  /* ---------------- ההרצה — מול מחשב בודד ---------------- */
+  /** מחזיר 'ok' | 'conflict' | 'unreachable' */
+  async runOne(remote, opts){
     opts = opts || {};
-    if (this.busy) return;
-    const c = this.cfg();
-    if (!c.token && !opts.manual) return;
-    if (this.blockedByHttps()){
-      if (opts.manual) openSyncSetup(true);
-      return;
+    const alive = await this.pingRemote(remote);
+    if (!alive) return 'unreachable';
+
+    /* saveDB() is debounced (350ms) — without a synchronous flush here, a sync that fires
+       right after an edit could read localStorage BEFORE the debounce writes it, push the
+       stale version, and then have commitTo's loadDB() overwrite the in-memory edit with
+       that stale merge result. Flushing first makes localBundle() always see the true
+       current state, no matter how recently something changed. */
+    try { persistNow(); } catch(e){}
+
+    const theirs = await this.pullFrom(remote);
+    const mine = this.localBundle();
+    const base = this.baseFor(remote.id);
+    const { merged, conflicts } = this.merge(mine, theirs, base);
+
+    if (conflicts.length){
+      openConflictDialog(remote, conflicts, merged, theirs);
+      return 'conflict';
     }
-    const o = this.origin();
-    if (!o){ if (opts.manual) openSyncSetup(); return; }
-
-    this.busy = true;
-    this.paintChip('שולח…');
-    try {
-      const alive = await this.ping();
-      if (!alive){ this.paintChip('אין חיבור'); this.busy = false; return; }
-
-      const theirs = await this.pull();
-      const mine = this.localBundle();
-      const base = this.base();
-      const { merged, conflicts } = this.merge(mine, theirs, base);
-
-      if (conflicts.length && !opts.resolve){
-        this.busy = false;
-        this.paintChip(`${conflicts.length} סתירות`);
-        openConflictDialog(conflicts, merged, theirs);
-        return;
-      }
-      await this.commit(merged);
-      this.paintChip('מסונכרן');
-      if (opts.manual) toast('הסנכרון הושלם');
-    } catch(e){
-      this.paintChip('שגיאה');
-      if (opts.manual) alert('הסנכרון נכשל: ' + (e.message || e));
-    }
-    this.busy = false;
+    await this.commitTo(remote, merged);
+    return 'ok';
   },
 
-  /** כותב את התוצאה לשני הצדדים ומעדכן את תמונת הבסיס */
-  async commit(merged){
-    await this.push(merged);
+  /** כותב את התוצאה לשני הצדדים ומעדכן את תמונת הבסיס — של המחשב הזה בלבד */
+  async commitTo(remote, merged){
+    await this.pushTo(remote, merged);
     Object.entries(merged).forEach(([k, v]) => { try { localStorage.setItem(k, v); } catch(e){} });
-    this.setBase(merged);
-    this.setCfg({ lastAt: Date.now() });
+    this.setBaseFor(remote.id, merged);
+    this.updateRemote(remote.id, { lastAt: Date.now() });
     loadProfiles();
     loadDB();
     pruneDB();
@@ -12296,20 +12309,67 @@ const Sync = {
     applyTheme(); renderAll(true);
   },
 
+  /* ---------------- ההרצה — כל המחשבים המוכרים ----------------
+     עוברים על כל מחשב מוגדר ומנסים; מי שלא נמצא ברשת הנוכחית פשוט מדולג
+     בשקט (זה הצפוי — אתה לא יכול להיות פיזית בשתי הרשתות בבת אחת).
+     נעצרים בסתירה הראשונה כדי לא לערום כמה חלונות בחירה זה על זה —
+     המחשבים הנותרים ינסו שוב בפעם הבאה. */
+  async run(opts){
+    opts = opts || {};
+    if (this.busy) return;
+    const remotes = this.remotes();
+    if (!remotes.length){ if (opts.manual) openSyncSetup(); return; }
+    if (this.blockedByHttps()){ if (opts.manual) openSyncSetup(true); return; }
+
+    this.busy = true;
+    this.paintChip('בודק…');
+    const done = [];
+    let hadConflict = false, hadError = false;
+    for (const remote of remotes){
+      if (!opts.manual && remote.auto === false) continue;
+      try {
+        const res = await this.runOne(remote, opts);
+        if (res === 'ok') done.push(remote.name || 'מחשב');
+        else if (res === 'conflict'){ hadConflict = true; break; }
+        // 'unreachable' — לא באותה רשת כרגע, מדלגים בשקט
+      } catch(e){ hadError = true; }
+    }
+    this.busy = false;
+    if (hadConflict) return;   // מסך הסתירות כבר פתוח ומטפל בהמשך בעצמו
+
+    if (done.length){
+      this.paintChip('מסונכרן: ' + done.join(', '));
+      if (opts.manual) toast('הסתנכרן עם ' + done.join(', '));
+    } else if (hadError){
+      this.paintChip('שגיאה');
+      if (opts.manual) alert('הסנכרון נכשל.');
+    } else {
+      this.paintChip('');
+      if (opts.manual) toast('לא נמצא אף מחשב מוכר ברשת הנוכחית');
+    }
+  },
+
   /** הכפתור נשאר תמיד עם אייקון 🔄 — הטקסט זז ל-title, והמצב מסומן בצבע ובסיבוב */
   paintChip(text){
     const chip = $('#syncChip2');
     if (!chip) return;
-    const c = this.cfg();
+    const remotes = this.remotes();
     chip.hidden = false;
-    const spinning = text === 'שולח…' || text === 'בודק…';
+    const spinning = text === 'בודק…';
     chip.className = 'btn icon sync-chip' +
       (spinning ? ' spinning' : '') +
-      (/שגיאה|אין חיבור|סתירות/.test(text || '') ? ' bad' : /מסונכרן/.test(text || '') ? ' ok' : '');
-    const last = c.lastAt ? 'סנכרון אחרון: ' + new Date(c.lastAt).toLocaleString('he-IL') : 'טרם סונכרן';
-    chip.title = c.token
-      ? (text ? text + ' · ' + last : 'לחיצה לסנכרון מיידי · ' + last)
-      : 'לחיצה להגדרת סנכרון עם המחשב';
+      (/שגיאה/.test(text || '') ? ' bad' : /מסונכרן/.test(text || '') ? ' ok' : '');
+    let summary;
+    if (!remotes.length) summary = 'אין מחשבים מוגדרים';
+    else {
+      const withTime = remotes.filter(r => r.lastAt).sort((a, b) => b.lastAt - a.lastAt);
+      summary = withTime.length
+        ? withTime.map(r => (r.name || 'מחשב') + ': ' + new Date(r.lastAt).toLocaleString('he-IL')).join(' · ')
+        : 'טרם סונכרן';
+    }
+    chip.title = remotes.length
+      ? (text ? text + ' · ' + summary : 'לחיצה לסנכרון מיידי · ' + summary)
+      : 'לחיצה להוספת מחשב לסנכרון';
   },
 
   start(){
@@ -12321,11 +12381,12 @@ const Sync = {
         });
       return;
     }
-    const c = this.cfg();
     this.paintChip();
-    if (!c.auto) return;
+    const remotes = this.remotes().filter(r => r.auto !== false);
+    if (!remotes.length) return;
+    const minEvery = Math.max(1, Math.min(...remotes.map(r => r.everyMin || 5)));
     clearInterval(this.timer);
-    this.timer = setInterval(() => this.run(), Math.max(1, c.everyMin) * 60000);
+    this.timer = setInterval(() => this.run(), minEvery * 60000);
     setTimeout(() => this.run(), 3000);
     window.addEventListener('online', () => this.run());
     document.addEventListener('visibilitychange', () => { if (!document.hidden) this.run(); });
@@ -12333,74 +12394,125 @@ const Sync = {
 };
 
 /* ---------------- מסך ההגדרה ---------------- */
+/** מסך הניהול — רשימת המחשבים המוכרים. תומך במספר בלתי מוגבל (בית, סטודיו, ...) */
 function openSyncSetup(httpsWarning){
-  const c = Sync.cfg();
   const body = el('div', { style: 'display:flex;flex-direction:column;gap:12px' });
 
   if (httpsWarning || Sync.blockedByHttps()){
     body.appendChild(el('div', { class: 'sync-warn' }, [
-      el('b', { text: '⚠ הדף הזה נטען מהאינטרנט (https), ולכן אינו יכול לפנות למחשב שברשת הביתית.' }),
+      el('b', { text: '⚠ הדף הזה נטען מהאינטרנט (https), ולכן אינו יכול לפנות למחשבים שברשת המקומית.' }),
       el('div', { text: 'זו חסימת אבטחה של הדפדפן, לא תקלה. הפתרון: פתח את הדשבורד ישירות מהכתובת של ' +
                         'המחשב ברשת — היא מופיעה בגרסת המחשב תחת "סנכרון". משם הסנכרון עובד מלא, ' +
                         'וגם אפשר להתקין את האפליקציה לטלפון.' })
     ]));
   }
 
-  const host = el('input', { type: 'text', value: c.host, placeholder: '192.168.1.20', dir: 'ltr' });
-  const port = el('input', { type: 'number', value: c.port, placeholder: '8790', dir: 'ltr' });
-  const token = el('input', { type: 'text', value: c.token, placeholder: 'האסימון מגרסת המחשב', dir: 'ltr' });
-  const auto = mkSwitch(c.auto, v => Sync.setCfg({ auto: v }));
-  const every = mkSelect([[2, 'כל 2 דקות'], [5, 'כל 5 דקות'], [15, 'כל רבע שעה'], [60, 'כל שעה']],
-    c.everyMin, v => Sync.setCfg({ everyMin: Number(v) }));
-  const status = el('div', { class: 'hint' });
-
-  const paintStatus = () => {
-    const cc = Sync.cfg();
-    status.textContent = cc.lastAt
-      ? 'סנכרון אחרון: ' + new Date(cc.lastAt).toLocaleString('he-IL')
-      : 'טרם בוצע סנכרון';
+  const list = el('div', { style: 'display:flex;flex-direction:column;gap:8px' });
+  const draw = () => {
+    list.innerHTML = '';
+    const remotes = Sync.remotes();
+    if (!remotes.length){
+      list.appendChild(el('div', { class: 'empty-note',
+        text: 'אין עדיין מחשבים מוגדרים. הוסף מחשב לכל רשת קבועה — למשל בית וסטודיו.' }));
+    }
+    remotes.forEach(r => {
+      list.appendChild(el('div', { class: 'sync-remote-row' }, [
+        el('div', { class: 'grow' }, [
+          el('div', { class: 'ttl', text: r.name || 'מחשב' }),
+          el('div', { class: 'meta', text: `${r.host}:${r.port}` +
+            (r.lastAt ? ' · סנכרון אחרון: ' + new Date(r.lastAt).toLocaleString('he-IL') : ' · טרם סונכרן') })
+        ]),
+        el('button', { class: 'btn sm', title: 'סנכרון מיידי מול המחשב הזה', onclick: async () => {
+          const res = await Sync.runOne(r, { manual: true });
+          if (res === 'ok') toast('הסתנכרן עם ' + (r.name || 'המחשב'));
+          else if (res === 'unreachable') toast((r.name || 'המחשב') + ' לא נמצא ברשת הנוכחית');
+          draw();
+        } }, '🔄'),
+        el('button', { class: 'btn sm', onclick: () => openRemoteEditor(r) }, '✎ עריכה')
+      ]));
+    });
   };
-  paintStatus();
-
-  body.appendChild(el('div', { class: 'field-row' }, [
-    field('כתובת המחשב ברשת', host), field('פורט', port)
-  ]));
-  body.appendChild(field('אסימון חיבור', token));
-  body.appendChild(el('div', { class: 'field-row' }, [
-    el('div', { class: 'field' }, [ el('label', { text: 'סנכרון אוטומטי' }), auto ]),
-    field('תדירות', every)
-  ]));
-  body.appendChild(status);
+  draw();
+  body.appendChild(list);
+  body.appendChild(el('button', { class: 'add-row', onclick: () => openRemoteEditor(null) }, '＋ הוספת מחשב'));
   body.appendChild(el('div', { class: 'hint',
-    text: 'את הכתובת והאסימון מוצאים בגרסת המחשב: הגדרות ← סנכרון ברשת המקומית. ' +
-          'כשאין חיבור, הכול נשמר במכשיר וממשיך לעבוד — והסנכרון יקרה מעצמו כשתחזור לרשת.' }));
+    text: 'לכל מחשב יש אסימון וכתובת משלו — מוצאים אותם בגרסת המחשב, בהגדרות ← סנכרון ברשת המקומית. ' +
+          'האפליקציה בודקת בכל רגע איזה מהמחשבים המוכרים נמצא איתך באותה רשת, ומסתנכרנת מולו — בלי שתצטרך לבחור.' }));
 
-  openModal('סנכרון ברשת המקומית', body, [
+  openModal('סנכרון ברשת המקומית', body, [ el('button', { class: 'btn', onclick: closeModal }, 'סגירה') ]);
+}
+
+/** הוספה/עריכה של מחשב יחיד ברשימת הסנכרון */
+/** existing=null להוספה. חוזר תמיד אל מסך הרשימה (openModal מחליף תוכן על אותו modal פתוח —
+    אין צורך ב-closeModal() בין המסכים, וזה מונע "היעלמות" של הדיאלוג באמצע פעולה). */
+function openRemoteEditor(existing){
+  const isNew = !existing;
+  const r = existing ? Object.assign({}, existing) :
+    { id: uid(), name: '', host: '', port: 8790, token: '', auto: true, everyMin: 5, lastAt: 0 };
+
+  const nm = el('input', { type: 'text', value: r.name, placeholder: 'למשל: בית / סטודיו' });
+  const host = el('input', { type: 'text', value: r.host, placeholder: '192.168.1.20', dir: 'ltr' });
+  const port = el('input', { type: 'number', value: r.port || 8790, placeholder: '8790', dir: 'ltr' });
+  const token = el('input', { type: 'text', value: r.token, placeholder: 'האסימון מגרסת המחשב', dir: 'ltr' });
+  const auto = mkSwitch(r.auto !== false, v => { r.auto = v; });
+  const every = mkSelect([[2, 'כל 2 דקות'], [5, 'כל 5 דקות'], [15, 'כל רבע שעה'], [60, 'כל שעה']],
+    r.everyMin || 5, v => { r.everyMin = Number(v); });
+  const status = el('div', { class: 'hint',
+    text: existing && existing.lastAt ? 'סנכרון אחרון: ' + new Date(existing.lastAt).toLocaleString('he-IL')
+                                       : 'טרם סונכרן' });
+
+  const grab = () => {
+    r.name = nm.value.trim();
+    r.host = host.value.trim();
+    r.port = Number(port.value) || 8790;
+    r.token = token.value.trim();
+  };
+
+  openModal(isNew ? 'מחשב חדש' : 'עריכת ' + (existing.name || 'מחשב'), [
+    field('שם — לזיהוי בלבד', nm),
+    el('div', { class: 'field-row' }, [ field('כתובת ברשת', host), field('פורט', port) ]),
+    field('אסימון חיבור', token),
+    el('div', { class: 'field-row' }, [
+      el('div', { class: 'field' }, [ el('label', { text: 'סנכרון אוטומטי כשהמחשב נמצא ברשת' }), auto ]),
+      field('תדירות בדיקה', every)
+    ]),
+    status
+  ], [
     el('button', { class: 'btn', onclick: async () => {
-      Sync.setCfg({ host: host.value.trim(), port: Number(port.value) || 8790, token: token.value.trim() });
-      const o = Sync.origin();
+      grab();
       status.textContent = 'בודק…';
-      const p = await Sync.ping(o);
-      status.textContent = p ? `✅ נמצא: ${p.hostname} (גרסה ${p.version})` : '❌ אין מענה בכתובת הזו';
+      const p = await Sync.pingRemote(r);
+      status.textContent = p ? `✅ נמצא: ${p.hostname} (גרסה ${p.version})` : '❌ אין מענה בכתובת הזו כרגע';
     } }, '🔌 בדיקת חיבור'),
     el('button', { class: 'btn primary', onclick: async () => {
-      Sync.setCfg({ host: host.value.trim(), port: Number(port.value) || 8790, token: token.value.trim() });
-      closeModal();
-      await Sync.run({ manual: true });
+      grab();
+      if (!r.host || !r.token){ toast('נא למלא כתובת ואסימון'); return; }
+      if (!r.name) r.name = 'מחשב ' + (Sync.remotes().length + 1);
+      if (isNew) Sync.addRemote(r); else Sync.updateRemote(r.id, r);
+      const res = await Sync.runOne(r, { manual: true });
+      if (res === 'ok') toast('הסתנכרן עם ' + r.name);
+      else if (res === 'unreachable') toast(r.name + ' נשמר — יסתנכרן כשתהיה איתו באותה רשת');
+      openSyncSetup();
     } }, 'שמירה וסנכרון'),
-    el('button', { class: 'btn', onclick: closeModal }, 'סגירה')
+    !isNew ? el('button', { class: 'btn danger', onclick: () => {
+      if (!confirm('להסיר את "' + (existing.name || 'המחשב') + '" מרשימת הסנכרון?')) return;
+      Sync.removeRemote(existing.id);
+      openSyncSetup();
+    } }, 'הסרה') : null,
+    el('button', { class: 'btn', onclick: openSyncSetup }, 'ביטול')
   ]);
 }
 
 /* ---------------- מסך הסתירות ---------------- */
-function openConflictDialog(conflicts, merged, theirs){
+function openConflictDialog(remote, conflicts, merged, theirs){
   const choice = {};                       // id → 'mine' | 'theirs' | 'both'
   conflicts.forEach(c => { choice[c.scope + '|' + c.id] = 'mine'; });
+  const whom = remote.name || 'המחשב';
 
   const body = el('div', { style: 'display:flex;flex-direction:column;gap:11px' });
   body.appendChild(el('div', { class: 'hint',
-    text: `נמצאו ${conflicts.length} פריטים ששונו גם כאן וגם במחשב. בחר מה לשמור בכל אחד. ` +
-          'שום דבר לא נכתב עד שתאשר, ובמחשב נשמר גיבוי לפני הכתיבה.' }));
+    text: `נמצאו ${conflicts.length} פריטים ששונו גם כאן וגם ב${whom}. בחר מה לשמור בכל אחד. ` +
+          'שום דבר לא נכתב עד שתאשר, ושם נשמר גיבוי לפני הכתיבה.' }));
 
   const bulk = el('div', { class: 'filters' }, [
     el('button', { class: 'btn sm', onclick: () => setAll('mine') }, 'הכול שלי'),
@@ -12424,7 +12536,7 @@ function openConflictDialog(conflicts, merged, theirs){
     };
     const opts = [
       mk('mine', '📱 מה שיש כאן', (c.summary && c.summary.mine) || '—'),
-      mk('theirs', '💻 מה שיש במחשב', (c.summary && c.summary.theirs) || '—')
+      mk('theirs', '💻 מה שיש ב' + whom, (c.summary && c.summary.theirs) || '—')
     ];
     if (canBoth) opts.push(mk('both', '➕ לשמור את שניהם',
       c.kind === 'day' ? 'הפגישות והמשימות מהשניים יאוחדו' : 'ייווצר עותק נוסף'));
@@ -12445,7 +12557,7 @@ function openConflictDialog(conflicts, merged, theirs){
   }); paint(); };
   paint();
 
-  openModal('בחירה בין גרסאות', body, [
+  openModal('בחירה בין גרסאות — ' + whom, body, [
     el('button', { class: 'btn primary', onclick: async () => {
       const out = JSON.parse(JSON.stringify(merged));
       conflicts.forEach(c => {
@@ -12455,12 +12567,12 @@ function openConflictDialog(conflicts, merged, theirs){
       closeModal();
       Sync.busy = false;
       try {
-        await Sync.commit(out);
-        Sync.paintChip('מסונכרן');
-        toast('הסנכרון הושלם');
+        await Sync.commitTo(remote, out);
+        Sync.paintChip('מסונכרן: ' + whom);
+        toast('הסתנכרן עם ' + whom);
       } catch(e){ alert('הכתיבה נכשלה: ' + (e.message || e)); }
     } }, 'אישור וסנכרון'),
-    el('button', { class: 'btn', onclick: () => { closeModal(); Sync.busy = false; Sync.paintChip('נדחה'); } },
+    el('button', { class: 'btn', onclick: () => { closeModal(); Sync.busy = false; Sync.paintChip(''); } },
       'ביטול')
   ]);
 }
