@@ -1743,7 +1743,7 @@ body.sidenav-on .app-bar{ padding-inline-end: 222px; }
 
 <header class="app-bar no-print">
   <div class="brand">
-    <b id="brandName">מתכנן</b><span>V4.3 · יומי · שבועי · חודשי · שנתי</span>
+    <b id="brandName">מתכנן</b><span>V4.4 · יומי · שבועי · חודשי · שנתי</span>
   </div>
 
   <div class="tabs" role="tablist" id="tabs">
@@ -2190,7 +2190,7 @@ const DEFAULTS = {
     travelDefault: 30,         // דקות נסיעה ברירת מחדל בין עבודות
     rainWarnPct: 40,           // אחוז סיכוי משקעים שמעליו מתריעים על צילום חוץ
     noEventPeriods: true,      // סימון ספירת העומר ובין המצרים
-    bdayRemindDays: 3,         // כמה ימים מראש להזכיר ימי הולדת ואזכרות
+    bdayRemindDays: 3,         // כמה ימים מראש להזכיר ימי הולדת (לאזכרות יש remindDays נפרד לכל אחת)
     minhag: 'edot',            // 'edot' = עדות המזרח (ברירת מחדל) · 'ashkenaz'
     onThisDay: true,           // כרטיס "היום לפני שנה"
     autoDarkSunset: false,     // מעבר לערכה כהה בשקיעה
@@ -2378,6 +2378,16 @@ function loadDB(){
   if (DB.meta.version < 4 && DB.settings.havdalahMinutes === 42 &&
       (DB.settings.minhag || 'edot') === 'edot')
     DB.settings.havdalahMinutes = 30;
+  /* V4.4: כרטיס "אזכרות וימי הולדת" פוצל לשני כרטיסים נפרדים. אם היה מותאם אישית
+     (מיקום או הסתרה) בפריסת תצוגת היום — שני הכרטיסים החדשים יורשים אותה הגדרה. */
+  if (DB.settings.layout && Array.isArray(DB.settings.layout.day)){
+    const list = DB.settings.layout.day;
+    const i = list.findIndex(w => w && w.id === 'anniv');
+    if (i >= 0){
+      const old = list[i];
+      list.splice(i, 1, { id: 'azkarot', on: old.on, col: old.col }, { id: 'birthdays', on: old.on, col: old.col });
+    }
+  }
   DB.meta.version = 4;
 }
 function deepDefaults(obj, defs){
@@ -3509,26 +3519,46 @@ function renderDay(){
   builders.deliveries = () => card('מסירות קרובות', 'c5', deliveriesCard(), [
     el('button', { class: 'btn sm ghost', title: 'כל העבודות', onclick: () => openBusiness('jobs') }, '💼')
   ]);
-  builders.anniv = () => {
+  /* --- V4.4: אזכרות וימי הולדת בכרטיסים נפרדים, כל אחד עם ניהול משלו --- */
+  builders.azkarot = () => {
     const box = el('div');
-    const today = hebAnnivForISO(iso);
-    const soon = hebAnnivUpcoming(DB.settings.bdayRemindDays || 3)
-      .filter(a => a.inDays > 0 && a.iso !== iso);
+    const today = hebAnnivForISO(iso).filter(a => a.kind === 'azkara');
+    const soon = azkarotUpcoming();
     if (!today.length && !soon.length)
-      box.appendChild(el('div', { class: 'empty-note', text: 'אין אזכרות או ימי הולדת בימים הקרובים' }));
+      box.appendChild(el('div', { class: 'empty-note', text: 'אין אזכרות קרובות' }));
     today.forEach(a => box.appendChild(el('div', { class: 'anniv-row' }, [
-      el('span', { class: 'ic', text: a.kind === 'azkara' ? '🕯' : '🎂' }),
+      el('span', { class: 'ic', text: '🕯' }),
       el('b', { text: a.name || '—' }),
-      el('span', { class: 'hint', text: a.kind === 'azkara' ? 'אזכרה — היום' :
-        a.years ? `יום הולדת ${a.years}` : 'יום הולדת — היום' })
+      el('span', { class: 'hint', text: 'אזכרה — היום' })
     ])));
     soon.forEach(a => box.appendChild(el('div', { class: 'anniv-row', style: 'opacity:.72' }, [
-      el('span', { class: 'ic', text: a.kind === 'azkara' ? '🕯' : '🎂' }),
+      el('span', { class: 'ic', text: '🕯' }),
       el('span', { text: a.name || '—' }),
       el('span', { class: 'hint', text: `בעוד ${a.inDays} ימים` })
     ])));
-    return card('אזכרות וימי הולדת', 'c1', box, [
+    return card('אזכרות', 'c1', box, [
       el('button', { class: 'btn sm ghost', title: 'ניהול אזכרות', onclick: openAzkarot }, '🕯')
+    ]);
+  };
+  builders.birthdays = () => {
+    const box = el('div');
+    const today = hebAnnivForISO(iso).filter(a => a.kind === 'bday');
+    const soon = birthdaysUpcoming(DB.settings.bdayRemindDays || 3)
+      .filter(a => a.inDays > 0 && a.iso !== iso);
+    if (!today.length && !soon.length)
+      box.appendChild(el('div', { class: 'empty-note', text: 'אין ימי הולדת קרובים' }));
+    today.forEach(a => box.appendChild(el('div', { class: 'anniv-row' }, [
+      el('span', { class: 'ic', text: '🎂' }),
+      el('b', { text: a.name || '—' }),
+      el('span', { class: 'hint', text: a.years ? `יום הולדת ${a.years}` : 'יום הולדת — היום' })
+    ])));
+    soon.forEach(a => box.appendChild(el('div', { class: 'anniv-row', style: 'opacity:.72' }, [
+      el('span', { class: 'ic', text: '🎂' }),
+      el('span', { text: a.name || '—' }),
+      el('span', { class: 'hint', text: `בעוד ${a.inDays} ימים` })
+    ])));
+    return card('ימי הולדת', 'c4', box, [
+      el('button', { class: 'btn sm ghost', title: 'עריכת יום הולדת דרך כרטיס איש הקשר', onclick: openContacts }, '👥')
     ]);
   };
   builders.onthisday = () => card('היום לפני שנה', 'c4', onThisDayCard(iso));
@@ -4177,9 +4207,10 @@ function renderSettings(){
   gD.appendChild(setRow('סימון ימי ספירה, בין המצרים וסליחות',
     mkSwitch(S.noEventPeriods, v => { S.noEventPeriods = v; saveDB(); renderAll(true); }),
     'לפי המנהג שנבחר למעלה. עוזר לתכנן חתונות, חופשות ופרויקטים'));
-  gD.appendChild(setRow('אזכרות וימי הולדת — תזכורת מראש',
+  gD.appendChild(setRow('ימי הולדת — תזכורת מראש',
     mkSelect([[0, 'ביום עצמו בלבד'], [1, 'יום'], [3, '3 ימים'], [7, 'שבוע'], [14, 'שבועיים']],
-      S.bdayRemindDays, v => { S.bdayRemindDays = Number(v); saveDB(); renderAll(true); })));
+      S.bdayRemindDays, v => { S.bdayRemindDays = Number(v); saveDB(); renderAll(true); }),
+    'לאזכרות יש טווח תזכורת נפרד, שנקבע לכל אחת בנפרד במסך "אזכרות"'));
   gD.appendChild(setRow('כרטיס "היום לפני שנה"',
     mkSwitch(S.onThisDay, v => { S.onThisDay = v; saveDB(); renderAll(true); })));
   gD.appendChild(setRow('שעות עבודה ביום', mkSelect(
@@ -6700,7 +6731,8 @@ const VIEW_WIDGETS = {
     { id: 'todos',     name: 'רשימת משימות',             col: 2 },
     { id: 'appts',     name: 'פגישות ואירועים',          col: 2 },
     { id: 'deliveries', name: 'מסירות קרובות',           col: 0 },
-    { id: 'anniv',     name: 'אזכרות וימי הולדת',        col: 0 },
+    { id: 'azkarot',   name: 'אזכרות',                    col: 0 },
+    { id: 'birthdays', name: 'ימי הולדת',                 col: 0 },
     { id: 'onthisday', name: 'היום לפני שנה',            col: 3, off: true },
     { id: 'contacts',  name: 'אנשי קשר',                 col: 2 },
     { id: 'jobs',      name: 'עבודות היום (סטודיו)',     col: 2 },
@@ -10737,12 +10769,30 @@ function hebAnnivForISO(iso){
   return out;
 }
 
-/** תזכורות מראש — מה מגיע בימים הקרובים */
-function hebAnnivUpcoming(days){
+/** אזכרות קרובות — לכל אזכרה טווח התזכורת שהוגדר לה עצמה (openAzkarot), לא טווח משותף */
+function azkarotUpcoming(){
   const out = [];
-  for (let i = 0; i <= (days || 14); i++){
+  const today = todayISO();
+  const hy = hebOf(new Date()).y;
+  DB.azkarot.forEach(y => {
+    if (!y || !y.hm) return;
+    let next = hebDateInYear(hy, y.hm, y.hd);
+    if (isoOf(next) < today) next = hebDateInYear(hy + 1, y.hm, y.hd);
+    const nextIso = isoOf(next);
+    const inDays = Math.round((fromISO(nextIso) - fromISO(today)) / 864e5);
+    const remind = y.remindDays == null ? 7 : y.remindDays;
+    if (inDays > 0 && inDays <= remind)
+      out.push({ kind: 'azkara', iso: nextIso, inDays, name: y.name, note: y.note, src: y });
+  });
+  return out.sort((a, b) => a.inDays - b.inDays);
+}
+
+/** ימי הולדת קרובים — טווח משותף מההגדרות (bdayRemindDays) */
+function birthdaysUpcoming(days){
+  const out = [];
+  for (let i = 0; i <= (days || 3); i++){
     const iso = isoOf(addDays(new Date(), i));
-    hebAnnivForISO(iso).forEach(a => out.push(Object.assign({ iso, inDays: i }, a)));
+    hebAnnivForISO(iso).forEach(a => { if (a.kind === 'bday') out.push(Object.assign({ iso, inDays: i }, a)); });
   }
   return out;
 }
