@@ -1458,6 +1458,27 @@ body.compact .area{ min-height:44px; }
 .ok-banner{ background:var(--accent-soft); color:var(--accent-ink); border-radius:11px; padding:14px;
   text-align:center; font-weight:700; }
 
+/* 33. סנכרון */
+.sync-chip{ cursor:pointer; }
+.sync-chip.ok{ background:var(--accent-soft); color:var(--accent-ink); }
+.sync-chip.bad{ background:var(--danger); color:#fff; }
+.sync-warn{ background:var(--c5,#f0e0c0); color:var(--c5i,#5a4520); padding:11px 13px; border-radius:11px;
+  display:flex; flex-direction:column; gap:5px; font-size:.86em; line-height:1.55; }
+.cf-row{ border:1px solid var(--line); border-radius:11px; padding:9px 11px; }
+.cf-head{ font-weight:700; font-size:.9em; margin-bottom:7px; }
+.cf-opts{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:7px; }
+.cf-opt{ text-align:start; background:var(--panel-2); border:2px solid var(--line); border-radius:9px;
+  padding:7px 9px; cursor:pointer; color:inherit; font:inherit; }
+.cf-opt:hover{ border-color:var(--accent); }
+.cf-opt.on{ border-color:var(--accent); background:var(--accent-soft); }
+.cf-lbl{ font-weight:700; font-size:.8em; margin-bottom:2px; }
+.cf-txt{ font-size:.76em; color:var(--ink-soft); line-height:1.4;
+  display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+.cf-opt.on .cf-txt{ color:var(--accent-ink); }
+.sync-url{ font-family:ui-monospace,Consolas,monospace; direction:ltr; background:var(--panel-2);
+  border:1px solid var(--line); border-radius:8px; padding:6px 9px; font-size:.85em; user-select:all;
+  display:block; margin:3px 0; }
+
 /* 31. מצב עריכת פריסה */
 .layout-bar{ position:fixed; inset-block-end:16px; inset-inline:50% auto; transform:translate(50%,140%);
   z-index:95; background:var(--panel); border:1px solid var(--accent); box-shadow:var(--shadow);
@@ -1471,18 +1492,35 @@ body.layout-edit .le-card{ outline:1px dashed var(--accent); outline-offset:2px;
 body.layout-edit .le-card.le-dragging{ opacity:.4; }
 body.layout-edit .le-card input, body.layout-edit .le-card textarea,
 body.layout-edit .le-card select, body.layout-edit .le-card .chk{ pointer-events:none; }
-.le-tools{ display:flex; align-items:center; gap:5px; padding:4px 8px; background:var(--accent-soft);
-  color:var(--accent-ink); border-radius:9px 9px 0 0; font-size:.76em; }
+/* רצועת הכותרת היא ידית הגרירה — touch-action:none מונע מהדפדפן לגלול במקום לגרור */
+.le-tools{ display:flex; align-items:center; gap:5px; padding:5px 8px; background:var(--accent-soft);
+  color:var(--accent-ink); border-radius:9px 9px 0 0; font-size:.76em;
+  touch-action:none; cursor:grab; user-select:none; -webkit-user-select:none; }
+.le-tools:active{ cursor:grabbing; }
 .le-tools .le-name{ flex:1; font-weight:700; }
-.le-grip{ cursor:grab; opacity:.7; }
+.le-grip{ opacity:.7; font-size:1.15em; }
 .le-btn{ background:var(--panel); border:1px solid var(--line); border-radius:6px; cursor:pointer;
-  color:inherit; font:inherit; line-height:1; padding:2px 7px; }
+  color:inherit; font:inherit; line-height:1; padding:3px 8px; touch-action:manipulation; }
 .le-btn:hover{ border-color:var(--accent); }
 .le-btn.danger{ color:var(--danger); }
 .le-drop{ height:9px; border-radius:6px; margin:2px 0; transition:height .12s,background .12s; }
 body.layout-edit .le-drop{ height:14px; background:color-mix(in srgb,var(--accent) 12%,transparent); }
-body.layout-edit .le-drop.over{ height:44px; background:var(--accent-soft);
+body.layout-edit .le-drop.over{ height:52px; background:var(--accent-soft);
   outline:2px dashed var(--accent); }
+body.le-dragging-now{ overscroll-behavior:none; }
+body.le-dragging-now *{ user-select:none !important; -webkit-user-select:none !important; }
+.le-ghost{ position:fixed; inset-block-start:0; inset-inline-start:0; z-index:200; pointer-events:none;
+  background:var(--accent); color:var(--panel); font-size:.8em; font-weight:700; padding:7px 13px;
+  border-radius:9px; box-shadow:var(--shadow); margin-inline-start:-40px; margin-block-start:-16px;
+  white-space:nowrap; opacity:.95; }
+
+/* במסך צר הכפתורים גדולים יותר, והגרירה פחות הכרחית */
+@media (max-width:760px){
+  .le-tools{ font-size:.82em; padding:7px 9px; gap:7px; flex-wrap:wrap; }
+  .le-btn{ padding:6px 11px; font-size:1em; }
+  body.layout-edit .le-drop{ height:20px; }
+  body.layout-edit .le-drop.over{ height:60px; }
+}
 
 /* 30. היום לפני שנה */
 .otd-row{ border-inline-start:3px solid var(--accent); padding:5px 10px; margin-bottom:7px; cursor:pointer;
@@ -1692,7 +1730,7 @@ body.sidenav-on .app-bar{ padding-inline-end: 222px; }
 
 <header class="app-bar no-print">
   <div class="brand">
-    <b id="brandName">מתכנן</b><span>V4.0 · יומי · שבועי · חודשי · שנתי</span>
+    <b id="brandName">מתכנן</b><span>V4.1 · יומי · שבועי · חודשי · שנתי</span>
   </div>
 
   <div class="tabs" role="tablist" id="tabs">
@@ -1723,6 +1761,7 @@ body.sidenav-on .app-bar{ padding-inline-end: 222px; }
   <div class="nav-group">
     <button class="profile-chip" id="profileChip" title="החלפת פרופיל">אישי</button>
     <span class="chip muted" id="syncChip" title="מצב נתוני Hebcal">•</span>
+    <span class="chip sync-chip" id="syncChip2" title="סנכרון ברשת המקומית" hidden>•</span>
     <button class="btn icon" id="btnQuickAdd" title="הוספה מהירה בעברית (Ctrl+N)">⚡</button>
     <button class="btn icon" id="btnLayoutEdit" title="מצב עריכת פריסה — גרירת בלוקים (E)">✋</button>
     <button class="btn icon" id="btnWall" title="מצב קיר הסטודיו (W)">🖥</button>
@@ -4277,6 +4316,15 @@ function renderSettings(){
   gS.appendChild(setRow('בדיקת תקינות נתונים',
     el('button', { class: 'btn sm', onclick: () => { closeDrawer(); openIntegrity(); } }, 'סריקה'),
     'מאתר פגישות כפולות, שיוכים שבורים ורשומות ריקות'));
+  /* --- V4.1: סנכרון ברשת המקומית (בגרסת המחשב יש בלוק משלו) --- */
+  if (!(typeof DESKTOP !== 'undefined' && DESKTOP)){
+    const sc = Sync.cfg();
+    gS.appendChild(setRow('סנכרון עם המחשב',
+      el('button', { class: 'btn sm', onclick: () => { closeDrawer(); openSyncSetup(); } },
+        sc.token ? 'הגדרות' : 'הגדרה'),
+      sc.lastAt ? 'סנכרון אחרון: ' + new Date(sc.lastAt).toLocaleString('he-IL')
+                : 'מסנכרן עם גרסת המחשב כשאתה ברשת הביתית'));
+  }
   gS.appendChild(setRow('כל כמה זמן',
     mkSelect([[3, '3 שעות'], [6, '6 שעות'], [12, '12 שעות'], [24, 'יממה']], S.backupEveryHours,
       v => { S.backupEveryHours = Number(v); saveDB(); })));
@@ -6747,7 +6795,9 @@ const LayoutEdit = {
   },
   hideBar(){ const b = $('#layoutBar'); if (b) b.remove(); },
 
-  /** הופך כל כרטיס לגריר ומוסיף אזורי שחרור בין הכרטיסים ובראש כל עמודה */
+  /** הופך כל כרטיס לגריר ומוסיף אזורי שחרור בין הכרטיסים ובראש כל עמודה.
+      הגרירה בנויה על Pointer Events ולא על HTML5 Drag & Drop, כי DnD
+      אינו נורה כלל ממגע — ולכן במסך מגע הסידור לא עבד. */
   decorate(view, cols){
     this.view = view;
     Object.entries(cols).forEach(([colIdx, host]) => {
@@ -6758,42 +6808,131 @@ const LayoutEdit = {
       host.insertBefore(this.dropZone(view, col, cards[0] ? cards[0].dataset.wid : null), host.firstChild);
       cards.forEach((card, i) => {
         card.classList.add('le-card');
-        card.setAttribute('draggable', 'true');
-        card.addEventListener('dragstart', e => {
-          this.dragId = card.dataset.wid;
-          card.classList.add('le-dragging');
-          try { e.dataTransfer.setData('text/plain', card.dataset.wid); } catch(err){}
-        });
-        card.addEventListener('dragend', () => { card.classList.remove('le-dragging'); this.dragId = null; });
-
         const next = cards[i + 1];
         card.after(this.dropZone(view, col, next ? next.dataset.wid : null));
 
         const tools = el('div', { class: 'le-tools' }, [
           el('span', { class: 'le-grip', title: 'גרירה', text: '⠿' }),
-          el('span', { class: 'le-name', text: card.dataset.wname || '' }),
+          el('span', { class: 'le-name' }),   // רווח גמיש — שם הכרטיס כבר מופיע בכותרת שמתחת
           el('button', { class: 'le-btn', title: 'הזזה לעמודה הקודמת',
             onclick: () => this.move(view, card.dataset.wid, col - 1) }, '›'),
           el('button', { class: 'le-btn', title: 'הזזה לעמודה הבאה',
             onclick: () => this.move(view, card.dataset.wid, col + 1) }, '‹'),
+          el('button', { class: 'le-btn up', title: 'העלאה',
+            onclick: () => this.nudge(view, card.dataset.wid, -1) }, '▲'),
+          el('button', { class: 'le-btn up', title: 'הורדה',
+            onclick: () => this.nudge(view, card.dataset.wid, 1) }, '▼'),
           el('button', { class: 'le-btn danger', title: 'הסתרת הבלוק',
             onclick: () => this.hide(view, card.dataset.wid) }, '✕')
         ]);
+        // הגרירה מתחילה מרצועת הכותרת — יעד מגע גדול, ומשאירה גלילה חופשית בגוף הכרטיס
+        this.attachDrag(tools, card, view);
         card.insertBefore(tools, card.firstChild);
       });
     });
   },
 
+  /** גרירה במגע ובעכבר כאחד */
+  attachDrag(handle, card, view){
+    const self = this;
+    let startX = 0, startY = 0, active = false, ghost = null, lastZone = null, scrollTimer = null;
+
+    const zoneUnder = (x, y) => {
+      if (ghost) ghost.style.visibility = 'hidden';
+      const n = document.elementFromPoint(x, y);
+      if (ghost) ghost.style.visibility = '';
+      if (!n) return null;
+      return n.closest ? (n.closest('.le-drop') ||
+             (n.closest('.le-card') ? self.nearestZone(n.closest('.le-card'), y) : null)) : null;
+    };
+
+    const onMove = e => {
+      const dx = e.clientX - startX, dy = e.clientY - startY;
+      if (!active){
+        if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;   // עוד לא גרירה — אולי לחיצה
+        active = true;
+        card.classList.add('le-dragging');
+        document.body.classList.add('le-dragging-now');
+        ghost = el('div', { class: 'le-ghost', text: card.dataset.wname || '' });
+        document.body.appendChild(ghost);
+      }
+      e.preventDefault();
+      ghost.style.transform = `translate(${e.clientX}px, ${e.clientY}px)`;
+
+      const z = zoneUnder(e.clientX, e.clientY);
+      if (z !== lastZone){
+        if (lastZone) lastZone.classList.remove('over');
+        if (z) z.classList.add('over');
+        lastZone = z;
+      }
+      // גלילה אוטומטית כשמתקרבים לקצה — הכרחי במסך טלפון
+      const edge = 90, vh = window.innerHeight;
+      let dir = 0;
+      if (e.clientY < edge) dir = -1;
+      else if (e.clientY > vh - edge) dir = 1;
+      clearInterval(scrollTimer); scrollTimer = null;
+      if (dir) scrollTimer = setInterval(() => window.scrollBy(0, dir * 14), 16);
+    };
+
+    const finish = e => {
+      handle.removeEventListener('pointermove', onMove);
+      handle.removeEventListener('pointerup', finish);
+      handle.removeEventListener('pointercancel', finish);
+      clearInterval(scrollTimer); scrollTimer = null;
+      try { handle.releasePointerCapture(e.pointerId); } catch(err){}
+      if (ghost){ ghost.remove(); ghost = null; }
+      card.classList.remove('le-dragging');
+      document.body.classList.remove('le-dragging-now');
+      if (lastZone){
+        lastZone.classList.remove('over');
+        const z = lastZone; lastZone = null;
+        if (active) self.place(view, card.dataset.wid, Number(z.dataset.col), z.dataset.before || null);
+      }
+      active = false;
+    };
+
+    handle.addEventListener('pointerdown', e => {
+      if (e.target.closest('.le-btn')) return;      // כפתור — לא גרירה
+      if (e.button != null && e.button !== 0) return;
+      startX = e.clientX; startY = e.clientY; active = false; lastZone = null;
+      try { handle.setPointerCapture(e.pointerId); } catch(err){}
+      handle.addEventListener('pointermove', onMove);
+      handle.addEventListener('pointerup', finish);
+      handle.addEventListener('pointercancel', finish);
+    });
+  },
+
+  /** אזור השחרור הקרוב לכרטיס שהאצבע נמצאת מעליו — למעלה או למטה ממנו */
+  nearestZone(card, y){
+    const r = card.getBoundingClientRect();
+    const before = y < r.top + r.height / 2;
+    let n = before ? card.previousElementSibling : card.nextElementSibling;
+    while (n && !n.classList.contains('le-drop')) n = before ? n.previousElementSibling : n.nextElementSibling;
+    return n || null;
+  },
+
   dropZone(view, col, beforeId){
     const z = el('div', { class: 'le-drop' });
-    z.addEventListener('dragover', e => { e.preventDefault(); z.classList.add('over'); });
-    z.addEventListener('dragleave', () => z.classList.remove('over'));
-    z.addEventListener('drop', e => {
-      e.preventDefault(); z.classList.remove('over');
-      const id = this.dragId || (() => { try { return e.dataTransfer.getData('text/plain'); } catch(err){ return null; } })();
-      if (id) this.place(view, id, col, beforeId);
-    });
+    z.dataset.col = String(col);
+    if (beforeId) z.dataset.before = beforeId;
     return z;
+  },
+
+  /** הזזה מקום אחד למעלה/למטה בתוך אותה עמודה — חלופה לגרירה במסך קטן */
+  nudge(view, id, dir){
+    const list = layoutFor(view);
+    const i = list.findIndex(w => w.id === id);
+    if (i < 0) return;
+    const col = list[i].col;
+    const sameCol = list.map((w, idx) => ({ w, idx })).filter(x => x.w.col === col && x.w.on);
+    const pos = sameCol.findIndex(x => x.w.id === id);
+    const target = sameCol[pos + dir];
+    if (!target) return;
+    const item = list.splice(i, 1)[0];
+    const to = list.findIndex(w => w.id === target.w.id);
+    list.splice(dir < 0 ? to : to + 1, 0, item);
+    saveLayout(view, list);
+    renderAll(true);
   },
 
   /** מעביר בלוק לעמודה ולמיקום מבוקשים ושומר */
@@ -7870,6 +8009,8 @@ function commandList(){
     { ic: '✋', nm: 'מצב עריכת פריסה',           grp: 'תצוגה',  run: () => LayoutEdit.toggle(), kbd: 'E' },
     { ic: '⌨', nm: 'מקשי קיצור',                grp: 'תצוגה',  run: openShortcuts, kbd: '?' },
     { ic: '🩺', nm: 'בדיקת תקינות נתונים',      grp: 'נתונים', run: openIntegrity },
+    { ic: '🔄', nm: 'סנכרון עם המחשב עכשיו',    grp: 'נתונים', run: () => Sync.run({ manual: true }) },
+    { ic: '🔗', nm: 'הגדרות סנכרון',            grp: 'נתונים', run: openSyncSetup },
     { ic: '📊', nm: 'ייבוא עבודות מקובץ',       grp: 'נתונים', run: importJobsFile },
     { ic: '💼', nm: 'הסטודיו — עבודות',         grp: 'עסק',    run: () => openBusiness('jobs') },
     { ic: '💰', nm: 'הסטודיו — כספים',          grp: 'עסק',    run: () => openBusiness('finance') },
@@ -11807,6 +11948,496 @@ function onThisDayCard(iso){
   return box;
 }
 
+/* ==========================================================================
+   33. סנכרון ברשת המקומית
+   --------------------------------------------------------------------------
+   המחשב מריץ שרת קטן ברשת הביתית. כל מכשיר שמגיע אליו מסתנכרן איתו.
+   כשאין רשת — הכול נשמר מקומית וממשיך לעבוד, והסנכרון מתבצע בחזרה הביתה.
+
+   המיזוג הוא מיזוג-שלושה: משווים את המצב שלי ואת המצב שבמחשב מול
+   **תמונת המצב מהסנכרון האחרון**. כך יודעים מי שינה מה:
+     · רק אני שיניתי       ⟵ נשמר שלי
+     · רק המחשב שינה       ⟵ נלקח משם
+     · שנינו שינינו אותו דבר ⟵ סתירה, ואתה בוחר
+   בלי זה, "מי שכתב אחרון מנצח" היה מוחק עבודה בשקט.
+   ========================================================================== */
+const SYNC_BASE_KEY = 'planner_syncbase_v1';
+const SYNC_CFG_KEY  = 'planner_synccfg_v1';
+
+const Sync = {
+  busy: false, lastTry: 0, timer: null,
+
+  cfg(){
+    let c = {};
+    try { c = JSON.parse(localStorage.getItem(SYNC_CFG_KEY) || '{}'); } catch(e){}
+    return Object.assign({ host: '', port: 8790, token: '', auto: true, everyMin: 5, lastAt: 0 }, c);
+  },
+  setCfg(patch){
+    const c = Object.assign(this.cfg(), patch || {});
+    try { localStorage.setItem(SYNC_CFG_KEY, JSON.stringify(c)); } catch(e){}
+    return c;
+  },
+  base(){
+    try { const raw = localStorage.getItem(SYNC_BASE_KEY); return raw ? JSON.parse(raw) : null; } catch(e){ return null; }
+  },
+  setBase(obj){
+    try { localStorage.setItem(SYNC_BASE_KEY, JSON.stringify(obj)); } catch(e){ /* אחסון מלא — המיזוג הבא ישאל יותר */ }
+  },
+
+  /** הכתובת של המחשב. כשהדף מוגש מהמחשב עצמו — זו אותה כתובת. */
+  origin(){
+    const c = this.cfg();
+    if (c.host) return `http://${c.host}:${c.port}`;
+    if (location.protocol === 'http:' && location.hostname && location.hostname !== 'localhost')
+      return location.origin;     // הדף הוגש מהמחשב — מסתנכרנים מולו
+    return '';
+  },
+
+  async ping(originOverride){
+    const o = originOverride || this.origin();
+    if (!o) return null;
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 2500);
+      const r = await fetch(o + '/sync/ping', { signal: ctrl.signal, cache: 'no-store' });
+      clearTimeout(t);
+      if (!r.ok) return null;
+      const j = await r.json();
+      return j && j.app === 'planner' ? j : null;
+    } catch(e){ return null; }
+  },
+
+  /** האם החסימה של הדפדפן תמנע מאיתנו בכלל להגיע למחשב */
+  blockedByHttps(){
+    return location.protocol === 'https:' && !/^https:/.test(this.origin() || 'http:');
+  },
+
+  async pull(){
+    const c = this.cfg(), o = this.origin();
+    const r = await fetch(`${o}/sync/pull?token=${encodeURIComponent(c.token)}`, { cache: 'no-store' });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || 'שגיאה בקריאה מהמחשב');
+    return j.bundle;
+  },
+  async push(bundle){
+    const c = this.cfg(), o = this.origin();
+    const r = await fetch(`${o}/sync/push?token=${encodeURIComponent(c.token)}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bundle })
+    });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || 'שגיאה בכתיבה למחשב');
+    return j;
+  },
+
+  /** החבילה המקומית — כל מפתחות היישום */
+  localBundle(){
+    const out = {};
+    const keys = ['planner_profiles_v1'];
+    try {
+      for (let i = 0; i < localStorage.length; i++){
+        const k = localStorage.key(i);
+        if (k && k.indexOf('planner_') === 0 &&
+            k !== SYNC_BASE_KEY && k !== SYNC_CFG_KEY && k !== 'planner_wx_v1') keys.push(k);
+      }
+    } catch(e){}
+    Array.from(new Set(keys)).forEach(k => { const v = localStorage.getItem(k); if (v != null) out[k] = v; });
+    return out;
+  },
+
+  parse(raw){ try { return raw == null ? null : JSON.parse(raw); } catch(e){ return null; } },
+
+  /* ---------------- מיזוג ---------------- */
+  /** משווה שלושה מצבים ומחזיר { merged, conflicts[] } */
+  merge(mine, theirs, base){
+    const conflicts = [];
+    const merged = {};
+    const keys = new Set([...Object.keys(mine || {}), ...Object.keys(theirs || {})]);
+    keys.forEach(k => {
+      const a = mine[k], b = theirs[k], c = base ? base[k] : undefined;
+      if (a === b){ merged[k] = a; return; }
+      if (a === undefined){ merged[k] = b; return; }
+      if (b === undefined){ merged[k] = a; return; }
+      if (c !== undefined && a === c){ merged[k] = b; return; }   // רק המחשב שינה
+      if (c !== undefined && b === c){ merged[k] = a; return; }   // רק אני שיניתי
+      // שנינו שינינו — יורדים לרזולוציה של רשומות בתוך המסד
+      if (/^planner_v1/.test(k)){
+        const r = this.mergeDB(this.parse(a), this.parse(b), this.parse(c), k);
+        merged[k] = JSON.stringify(r.db);
+        conflicts.push(...r.conflicts);
+      } else {
+        conflicts.push({ key: k, scope: k, id: k, label: k, mine: a, theirs: b, kind: 'raw' });
+        merged[k] = a;
+      }
+    });
+    return { merged, conflicts };
+  },
+
+  /** מיזוג ברמת הרשומה: ימים לפי תאריך, ושאר האוספים לפי מזהה */
+  mergeDB(mine, theirs, base, storeKeyName){
+    const conflicts = [];
+    if (!mine)   return { db: theirs, conflicts };
+    if (!theirs) return { db: mine, conflicts };
+    base = base || {};
+    const db = JSON.parse(JSON.stringify(mine));
+    const S = s => JSON.stringify(s === undefined ? null : s);
+
+    /* --- ימים --- */
+    db.days = db.days || {};
+    const dayKeys = new Set([...Object.keys(mine.days || {}), ...Object.keys(theirs.days || {})]);
+    dayKeys.forEach(iso => {
+      const a = (mine.days || {})[iso], b = (theirs.days || {})[iso], c = (base.days || {})[iso];
+      if (S(a) === S(b)) return;
+      if (a === undefined){ db.days[iso] = b; return; }
+      if (b === undefined){ return; }
+      if (S(a) === S(c)){ db.days[iso] = b; return; }
+      if (S(b) === S(c)){ return; }
+      conflicts.push({ key: storeKeyName, scope: 'days', id: iso, kind: 'day',
+        label: fromISO(iso).toLocaleDateString('he-IL') + ' · ' + DOW_LONG[fromISO(iso).getDay()],
+        mine: a, theirs: b, summary: { mine: this.dayText(a), theirs: this.dayText(b) } });
+    });
+
+    /* --- אוספים עם מזהה --- */
+    const LISTS = {
+      jobs: 'עבודה', contacts: 'איש קשר', docs: 'מסמך', finance: 'תנועה כספית',
+      timeLogs: 'רישום שעות', leads: 'פנייה', crew: 'איש צוות', priceItems: 'פריט מחירון',
+      azkarot: 'אזכרה', checklists: 'צ׳קליסט', events: 'אירוע', recurring: 'משימה קבועה',
+      templates: 'תבנית', weekTemplates: 'תבנית שבוע', layers: 'שכבה', bigGoals: 'יעד',
+      gearLists: 'רשימת ציוד', zmanReminders: 'תזכורת זמן'
+    };
+    Object.entries(LISTS).forEach(([list, noun]) => {
+      const A = mine[list] || [], B = theirs[list] || [], C = base[list] || [];
+      const byId = arr => { const m = {}; (arr || []).forEach(x => { if (x && x.id) m[x.id] = x; }); return m; };
+      const ma = byId(A), mb = byId(B), mc = byId(C);
+      const out = [];
+      const ids = new Set([...Object.keys(ma), ...Object.keys(mb)]);
+      ids.forEach(id => {
+        const a = ma[id], b = mb[id], c = mc[id];
+        if (S(a) === S(b)){ if (a) out.push(a); return; }
+        if (!a){ out.push(b); return; }                       // נוסף במחשב
+        if (!b){ if (!c) out.push(a); return; }               // נוסף אצלי / נמחק במחשב
+        if (S(a) === S(c)){ out.push(b); return; }
+        if (S(b) === S(c)){ out.push(a); return; }
+        out.push(a);
+        conflicts.push({ key: storeKeyName, scope: list, id, kind: 'item', noun,
+          label: noun + ': ' + (a.title || a.name || a.what || a.desc || a.number || id),
+          mine: a, theirs: b,
+          summary: { mine: this.itemText(a), theirs: this.itemText(b) } });
+      });
+      db[list] = out;
+    });
+
+    /* --- הגדרות: כל שדה בנפרד --- */
+    db.settings = Object.assign({}, mine.settings);
+    const sKeys = new Set([...Object.keys(mine.settings || {}), ...Object.keys(theirs.settings || {})]);
+    sKeys.forEach(k => {
+      const a = (mine.settings || {})[k], b = (theirs.settings || {})[k], c = (base.settings || {})[k];
+      if (S(a) === S(b)) return;
+      if (S(a) === S(c)){ db.settings[k] = b; return; }
+      if (S(b) === S(c)) return;
+      conflicts.push({ key: storeKeyName, scope: 'settings', id: k, kind: 'setting',
+        label: 'הגדרה: ' + k, mine: a, theirs: b,
+        summary: { mine: String(a), theirs: String(b) } });
+    });
+
+    /* --- תקופות (שבוע/חודש/שנה) — לפי מפתח --- */
+    ['weeks', 'months', 'hmonths', 'years', 'hyears'].forEach(bucket => {
+      db[bucket] = Object.assign({}, mine[bucket]);
+      const ks = new Set([...Object.keys(mine[bucket] || {}), ...Object.keys(theirs[bucket] || {})]);
+      ks.forEach(k => {
+        const a = (mine[bucket] || {})[k], b = (theirs[bucket] || {})[k], c = (base[bucket] || {})[k];
+        if (S(a) === S(b)) return;
+        if (a === undefined){ db[bucket][k] = b; return; }
+        if (b === undefined) return;
+        if (S(a) === S(c)){ db[bucket][k] = b; return; }
+        if (S(b) === S(c)) return;
+        conflicts.push({ key: storeKeyName, scope: bucket, id: k, kind: 'period',
+          label: 'תקופה: ' + k, mine: a, theirs: b,
+          summary: { mine: this.dayText(a), theirs: this.dayText(b) } });
+      });
+    });
+
+    /* --- רישום הייבוא: איחוד, אף פעם לא סתירה --- */
+    db.importLog = Object.assign({}, theirs.importLog || {}, mine.importLog || {});
+    return { db, conflicts };
+  },
+
+  dayText(r){
+    if (!r) return '(ריק)';
+    const bits = [];
+    const ap = (r.appts || []).filter(a => a && (a.what || '').trim());
+    if (ap.length) bits.push(ap.map(a => (a.time ? a.time + ' ' : '') + a.what).join(' · '));
+    const td = (r.todos || []).filter(t => t && (t.t || '').trim());
+    if (td.length) bits.push(td.length + ' משימות: ' + td.slice(0, 3).map(t => t.t).join(', '));
+    if ((r.notes || '').trim()) bits.push('הערות: ' + r.notes.slice(0, 40));
+    return bits.join(' | ') || '(ריק)';
+  },
+  itemText(x){
+    if (!x) return '(אין)';
+    const bits = [];
+    if (x.iso) bits.push(x.iso.split('-').reverse().join('/'));
+    if (x.time) bits.push(x.time);
+    if (x.status) bits.push(String(x.status));
+    if (x.price != null && x.price !== 0) bits.push(money(x.price));
+    if (x.paid != null && x.paid !== 0) bits.push('שולם ' + money(x.paid));
+    if (x.phone) bits.push(x.phone);
+    if (x.note) bits.push(String(x.note).slice(0, 30));
+    return bits.join(' · ') || '—';
+  },
+
+  /* ---------------- ההרצה ---------------- */
+  async run(opts){
+    opts = opts || {};
+    if (this.busy) return;
+    const c = this.cfg();
+    if (!c.token && !opts.manual) return;
+    if (this.blockedByHttps()){
+      if (opts.manual) openSyncSetup(true);
+      return;
+    }
+    const o = this.origin();
+    if (!o){ if (opts.manual) openSyncSetup(); return; }
+
+    this.busy = true;
+    this.paintChip('שולח…');
+    try {
+      const alive = await this.ping();
+      if (!alive){ this.paintChip('אין חיבור'); this.busy = false; return; }
+
+      const theirs = await this.pull();
+      const mine = this.localBundle();
+      const base = this.base();
+      const { merged, conflicts } = this.merge(mine, theirs, base);
+
+      if (conflicts.length && !opts.resolve){
+        this.busy = false;
+        this.paintChip(`${conflicts.length} סתירות`);
+        openConflictDialog(conflicts, merged, theirs);
+        return;
+      }
+      await this.commit(merged);
+      this.paintChip('מסונכרן');
+      if (opts.manual) toast('הסנכרון הושלם');
+    } catch(e){
+      this.paintChip('שגיאה');
+      if (opts.manual) alert('הסנכרון נכשל: ' + (e.message || e));
+    }
+    this.busy = false;
+  },
+
+  /** כותב את התוצאה לשני הצדדים ומעדכן את תמונת הבסיס */
+  async commit(merged){
+    await this.push(merged);
+    Object.entries(merged).forEach(([k, v]) => { try { localStorage.setItem(k, v); } catch(e){} });
+    this.setBase(merged);
+    this.setCfg({ lastAt: Date.now() });
+    loadProfiles();
+    loadDB();
+    pruneDB();
+    invalidateContactCache(); invalidatePlacesCache(); _evCache.key = null;
+    _prevState = JSON.stringify(DB);
+    applyTheme(); renderAll(true);
+  },
+
+  paintChip(text){
+    const chip = $('#syncChip2');
+    if (!chip) return;
+    const c = this.cfg();
+    chip.hidden = false;
+    chip.textContent = text || (c.lastAt ? 'מסונכרן' : 'לא מוגדר');
+    chip.className = 'chip sync-chip' +
+      (/שגיאה|אין חיבור|סתירות/.test(text || '') ? ' bad' : /מסונכרן/.test(text || '') ? ' ok' : '');
+    chip.title = c.lastAt ? 'סנכרון אחרון: ' + new Date(c.lastAt).toLocaleString('he-IL') : 'לא סונכרן עדיין';
+  },
+
+  start(){
+    const c = this.cfg();
+    this.paintChip();
+    if (typeof DESKTOP !== 'undefined' && DESKTOP && window.plannerDesktop.onSyncChanged)
+      window.plannerDesktop.onSyncChanged(() => {
+        loadDB(); renderAll(true); toast('הנתונים עודכנו ממכשיר אחר');
+      });
+    if (!c.auto) return;
+    clearInterval(this.timer);
+    this.timer = setInterval(() => this.run(), Math.max(1, c.everyMin) * 60000);
+    setTimeout(() => this.run(), 3000);
+    window.addEventListener('online', () => this.run());
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) this.run(); });
+  }
+};
+
+/* ---------------- מסך ההגדרה ---------------- */
+function openSyncSetup(httpsWarning){
+  const c = Sync.cfg();
+  const body = el('div', { style: 'display:flex;flex-direction:column;gap:12px' });
+
+  if (httpsWarning || Sync.blockedByHttps()){
+    body.appendChild(el('div', { class: 'sync-warn' }, [
+      el('b', { text: '⚠ הדף הזה נטען מהאינטרנט (https), ולכן אינו יכול לפנות למחשב שברשת הביתית.' }),
+      el('div', { text: 'זו חסימת אבטחה של הדפדפן, לא תקלה. הפתרון: פתח את הדשבורד ישירות מהכתובת של ' +
+                        'המחשב ברשת — היא מופיעה בגרסת המחשב תחת "סנכרון". משם הסנכרון עובד מלא, ' +
+                        'וגם אפשר להתקין את האפליקציה לטלפון.' })
+    ]));
+  }
+
+  const host = el('input', { type: 'text', value: c.host, placeholder: '192.168.1.20', dir: 'ltr' });
+  const port = el('input', { type: 'number', value: c.port, placeholder: '8790', dir: 'ltr' });
+  const token = el('input', { type: 'text', value: c.token, placeholder: 'האסימון מגרסת המחשב', dir: 'ltr' });
+  const auto = mkSwitch(c.auto, v => Sync.setCfg({ auto: v }));
+  const every = mkSelect([[2, 'כל 2 דקות'], [5, 'כל 5 דקות'], [15, 'כל רבע שעה'], [60, 'כל שעה']],
+    c.everyMin, v => Sync.setCfg({ everyMin: Number(v) }));
+  const status = el('div', { class: 'hint' });
+
+  const paintStatus = () => {
+    const cc = Sync.cfg();
+    status.textContent = cc.lastAt
+      ? 'סנכרון אחרון: ' + new Date(cc.lastAt).toLocaleString('he-IL')
+      : 'טרם בוצע סנכרון';
+  };
+  paintStatus();
+
+  body.appendChild(el('div', { class: 'field-row' }, [
+    field('כתובת המחשב ברשת', host), field('פורט', port)
+  ]));
+  body.appendChild(field('אסימון חיבור', token));
+  body.appendChild(el('div', { class: 'field-row' }, [
+    el('div', { class: 'field' }, [ el('label', { text: 'סנכרון אוטומטי' }), auto ]),
+    field('תדירות', every)
+  ]));
+  body.appendChild(status);
+  body.appendChild(el('div', { class: 'hint',
+    text: 'את הכתובת והאסימון מוצאים בגרסת המחשב: הגדרות ← סנכרון ברשת המקומית. ' +
+          'כשאין חיבור, הכול נשמר במכשיר וממשיך לעבוד — והסנכרון יקרה מעצמו כשתחזור לרשת.' }));
+
+  openModal('סנכרון ברשת המקומית', body, [
+    el('button', { class: 'btn', onclick: async () => {
+      Sync.setCfg({ host: host.value.trim(), port: Number(port.value) || 8790, token: token.value.trim() });
+      const o = Sync.origin();
+      status.textContent = 'בודק…';
+      const p = await Sync.ping(o);
+      status.textContent = p ? `✅ נמצא: ${p.hostname} (גרסה ${p.version})` : '❌ אין מענה בכתובת הזו';
+    } }, '🔌 בדיקת חיבור'),
+    el('button', { class: 'btn primary', onclick: async () => {
+      Sync.setCfg({ host: host.value.trim(), port: Number(port.value) || 8790, token: token.value.trim() });
+      closeModal();
+      await Sync.run({ manual: true });
+    } }, 'שמירה וסנכרון'),
+    el('button', { class: 'btn', onclick: closeModal }, 'סגירה')
+  ]);
+}
+
+/* ---------------- מסך הסתירות ---------------- */
+function openConflictDialog(conflicts, merged, theirs){
+  const choice = {};                       // id → 'mine' | 'theirs' | 'both'
+  conflicts.forEach(c => { choice[c.scope + '|' + c.id] = 'mine'; });
+
+  const body = el('div', { style: 'display:flex;flex-direction:column;gap:11px' });
+  body.appendChild(el('div', { class: 'hint',
+    text: `נמצאו ${conflicts.length} פריטים ששונו גם כאן וגם במחשב. בחר מה לשמור בכל אחד. ` +
+          'שום דבר לא נכתב עד שתאשר, ובמחשב נשמר גיבוי לפני הכתיבה.' }));
+
+  const bulk = el('div', { class: 'filters' }, [
+    el('button', { class: 'btn sm', onclick: () => setAll('mine') }, 'הכול שלי'),
+    el('button', { class: 'btn sm', onclick: () => setAll('theirs') }, 'הכול מהמחשב'),
+    el('button', { class: 'btn sm', onclick: () => setAll('both') }, 'לשמור את שניהם')
+  ]);
+  body.appendChild(bulk);
+
+  const list = el('div', { class: 'imp-scroll', style: 'display:flex;flex-direction:column;gap:8px' });
+  const rows = [];
+  conflicts.forEach(c => {
+    const key = c.scope + '|' + c.id;
+    const canBoth = c.kind === 'item' || c.kind === 'day';
+    const mk = (val, label, text) => {
+      const b = el('button', { class: 'cf-opt', onclick: () => { choice[key] = val; paint(); } }, [
+        el('div', { class: 'cf-lbl', text: label }),
+        el('div', { class: 'cf-txt', text: text })
+      ]);
+      b.dataset.val = val;
+      return b;
+    };
+    const opts = [
+      mk('mine', '📱 מה שיש כאן', (c.summary && c.summary.mine) || '—'),
+      mk('theirs', '💻 מה שיש במחשב', (c.summary && c.summary.theirs) || '—')
+    ];
+    if (canBoth) opts.push(mk('both', '➕ לשמור את שניהם',
+      c.kind === 'day' ? 'הפגישות והמשימות מהשניים יאוחדו' : 'ייווצר עותק נוסף'));
+    const row = el('div', { class: 'cf-row' }, [
+      el('div', { class: 'cf-head', text: c.label }),
+      el('div', { class: 'cf-opts' }, opts)
+    ]);
+    rows.push({ c, key, row, opts });
+    list.appendChild(row);
+  });
+  body.appendChild(list);
+
+  const paint = () => rows.forEach(r => r.opts.forEach(o =>
+    o.classList.toggle('on', choice[r.key] === o.dataset.val)));
+  const setAll = v => { rows.forEach(r => {
+    if (v === 'both' && !r.opts.some(o => o.dataset.val === 'both')) choice[r.key] = 'mine';
+    else choice[r.key] = v;
+  }); paint(); };
+  paint();
+
+  openModal('בחירה בין גרסאות', body, [
+    el('button', { class: 'btn primary', onclick: async () => {
+      const out = JSON.parse(JSON.stringify(merged));
+      conflicts.forEach(c => {
+        const v = choice[c.scope + '|' + c.id];
+        applyConflictChoice(out, c, v);
+      });
+      closeModal();
+      Sync.busy = false;
+      try {
+        await Sync.commit(out);
+        Sync.paintChip('מסונכרן');
+        toast('הסנכרון הושלם');
+      } catch(e){ alert('הכתיבה נכשלה: ' + (e.message || e)); }
+    } }, 'אישור וסנכרון'),
+    el('button', { class: 'btn', onclick: () => { closeModal(); Sync.busy = false; Sync.paintChip('נדחה'); } },
+      'ביטול')
+  ]);
+}
+
+/** מחיל בחירה אחת על החבילה הממוזגת */
+function applyConflictChoice(bundle, c, v){
+  const raw = bundle[c.key];
+  if (c.kind === 'raw'){ if (v === 'theirs') bundle[c.key] = c.theirs; return; }
+  let db; try { db = JSON.parse(raw); } catch(e){ return; }
+
+  if (c.kind === 'day'){
+    if (v === 'theirs') db.days[c.id] = c.theirs;
+    else if (v === 'both'){
+      const a = JSON.parse(JSON.stringify(c.mine)), b = c.theirs;
+      const sig = x => JSON.stringify(x);
+      const have = new Set((a.appts || []).map(sig));
+      (b.appts || []).forEach(x => { if (x && !have.has(sig(x))) (a.appts = a.appts || []).push(x); });
+      const haveT = new Set((a.todos || []).map(t => (t && t.t) || ''));
+      (b.todos || []).forEach(t => { if (t && !haveT.has(t.t || '')) (a.todos = a.todos || []).push(t); });
+      if ((b.notes || '').trim() && b.notes !== a.notes)
+        a.notes = [(a.notes || '').trim(), b.notes.trim()].filter(Boolean).join('\n— — —\n');
+      sortAppts(a.appts);
+      db.days[c.id] = a;
+    }
+  } else if (c.kind === 'item'){
+    const arr = db[c.scope] || (db[c.scope] = []);
+    const i = arr.findIndex(x => x && x.id === c.id);
+    if (v === 'theirs'){ if (i >= 0) arr[i] = c.theirs; else arr.push(c.theirs); }
+    else if (v === 'both'){
+      const copy = JSON.parse(JSON.stringify(c.theirs));
+      copy.id = uid();
+      const nm = copy.title !== undefined ? 'title' : copy.name !== undefined ? 'name' : null;
+      if (nm) copy[nm] = (copy[nm] || '') + ' (מהמחשב)';
+      arr.push(copy);
+    }
+  } else if (c.kind === 'setting'){
+    if (v === 'theirs') (db.settings = db.settings || {})[c.id] = c.theirs;
+  } else if (c.kind === 'period'){
+    if (v === 'theirs') (db[c.scope] = db[c.scope] || {})[c.id] = c.theirs;
+  }
+  bundle[c.key] = JSON.stringify(db);
+}
+
 /* ======================= 13. ניווט, טעינה ואתחול ======================= */
 function applyTheme(){
   const t = DB.settings.theme;
@@ -11986,6 +12617,7 @@ function wireUI(){
   $('#btnWall').addEventListener('click', () => Wall.open());
   $('#btnLayoutEdit').addEventListener('click', () => LayoutEdit.toggle());
   $('#wallClose').addEventListener('click', () => Wall.close());
+  $('#syncChip2').addEventListener('click', () => Sync.run({ manual: true }));
   $('#profileChip').addEventListener('click', openProfiles);
   $('#paletteBack').addEventListener('click', e => { if (e.target.id === 'paletteBack') closePalette(); });
   $('#paletteInput').addEventListener('input', e => { PALETTE_SEL = 0; renderPalette(e.target.value); });
@@ -12131,6 +12763,7 @@ async function bootAfterUnlock(){
   applyAutoDark();
   setInterval(applyAutoDark, 5 * 60000);
   ClockWatch.start();          // מעבר שעון קיץ/חורף ומעבר יום — אוטומטי
+  Sync.start();                // סנכרון ברשת המקומית
   checkBackupReminder();
   setInterval(updateNowLines, 60000);
   loadWeather().then(m => { if (m) renderAll(true); });
