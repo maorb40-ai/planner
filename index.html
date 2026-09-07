@@ -1046,6 +1046,21 @@ body.shabbat-mode .pomo{ display: none !important; }
                border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); }
 .imp-table td{ padding: 4px 6px; border-bottom: 1px solid var(--grid-line); }
 .imp-table td.d{ font-family: var(--font-num); direction: ltr; white-space: nowrap; color: var(--accent-ink); }
+.bulk-edit-table td{ padding: 3px 4px; vertical-align: middle; }
+.oh-wrap{ display: flex; flex-wrap: wrap; gap: 14px; max-height: 60vh; overflow: auto; }
+.oh-month{ width: 150px; }
+.oh-mn{ font-size: .78em; font-weight: 700; color: var(--ink-soft); margin-bottom: 4px; }
+.oh-grid{ display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; direction: rtl; }
+.oh-c{ aspect-ratio: 1; border-radius: 3px; font-size: .58em; display: flex; align-items: center; justify-content: center;
+  color: var(--ink-soft); background: var(--panel-2); }
+.oh-c.empty{ background: transparent; }
+.oh-c.lvl1{ background: var(--accent-soft); color: var(--accent-ink); }
+.oh-c.lvl2{ background: var(--accent); color: var(--accent-contrast); }
+.oh-c.lvl3{ background: var(--danger); color: #fff; }
+.oh-legend{ display: flex; gap: 14px; margin-top: 10px; font-size: .8em; align-items: center; flex-wrap: wrap; }
+.oh-legend i{ border-radius: 3px; }
+.bulk-edit-table input, .bulk-edit-table select{ font: inherit; font-size: .95em; padding: 4px 6px;
+  border: 1px solid var(--line); border-radius: 7px; background: var(--panel-2); color: var(--ink); width: 100%; }
 .imp-scroll{ max-height: 40vh; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); }
 .imp-stats{ display: flex; gap: 8px; flex-wrap: wrap; }
 .imp-stats .stat-box{ flex: 1 1 100px; }
@@ -1784,7 +1799,7 @@ body.sidenav-on .app-bar{ padding-inline-end: 222px; }
 
 <header class="app-bar no-print">
   <div class="brand">
-    <b id="brandName">מתכנן</b><span>V4.6 · יומי · שבועי · חודשי · שנתי</span>
+    <b id="brandName">מתכנן</b><span>V4.7 · יומי · שבועי · חודשי · שנתי</span>
   </div>
 
   <div class="tabs" role="tablist" id="tabs">
@@ -2288,7 +2303,10 @@ const DEFAULTS = {
   parashaNotes: {},       // { parashaName: text } — הערה אישית שנשמרת לאותה פרשה משנה לשנה
   annualReminders: [],    // תזכורות שנתיות כלליות (לא יום הולדת/אזכרה) — { id, name, gm, gd, remindDays, note }
   archives: {},           // { year: { days:{...}, archivedAt } } — ימים ישנים שהועברו לארכיון קריא-בלבד
-  auditLog: []            // { at, action, kind, label } — יצירה/מחיקה של רשומות עסקיות
+  auditLog: [],           // { at, action, kind, label } — יצירה/מחיקה של רשומות עסקיות
+  /* --- V4.7 --- */
+  quickLists: { kinds: [], locations: [], sources: [] }, // "בנקים" של ערכים לבחירה מהירה בשדות טקסט חופשי
+  lastRateReviewAt: 0     // מתי נבדקו המחירים לאחרונה — לתזכורת עדכון תעריפים שנתית
 };
 
 const DAY_DEFAULT = () => ({
@@ -2362,7 +2380,11 @@ const JOB_DEFAULT = () => ({ id: uid(), title: '', who: '', iso: '', time: '', k
                              shootMinutes: 0,     // זמן צילום בפועל שנצבר (סטופר)
                              shootStartedAt: 0,   // אם רץ כרגע — זמן ההתחלה
                              photosUploaded: false, // הועלו תמונות ללקוח
-                             equipChecked: [] });  // אילו פריטים בצ'קליסט הציוד סומנו
+                             equipChecked: [],   // אילו פריטים בצ'קליסט הציוד סומנו
+                             /* --- V4.7 --- */
+                             thankYouSent: false, // נשלחה הודעת תודה אחרי מסירה
+                             addonOffered: false, // הוצעו מוצרים נלווים (אלבום/הדפסות) אחרי מסירה
+                             retroGood: '', retroBad: '' });  // יומן "מה עבד" קצר לכל עבודה
 
 /* --- V4: מבני נתונים חדשים --- */
 const LEAD_STAGES = [
@@ -2411,6 +2433,8 @@ function loadDB(){
   if (!DB.availability || typeof DB.availability !== 'object') DB.availability = {};
   if (!DB.stageChecklists || typeof DB.stageChecklists !== 'object') DB.stageChecklists = {};
   if (!Array.isArray(DB.auditLog)) DB.auditLog = [];
+  if (!DB.quickLists || typeof DB.quickLists !== 'object') DB.quickLists = { kinds: [], locations: [], sources: [] };
+  ['kinds', 'locations', 'sources'].forEach(k => { if (!Array.isArray(DB.quickLists[k])) DB.quickLists[k] = []; });
   if (!DB.parashaNotes || typeof DB.parashaNotes !== 'object') DB.parashaNotes = {};
   if (!DB.archives || typeof DB.archives !== 'object') DB.archives = {};
   if (!DB.settings.docCounters) DB.settings.docCounters = { quote: 1, contract: 1, invoice: 1, receipt: 1 };
@@ -2459,6 +2483,10 @@ function loadDB(){
     if (j.shootStartedAt === undefined) j.shootStartedAt = 0;
     if (j.photosUploaded === undefined) j.photosUploaded = false;
     if (!Array.isArray(j.equipChecked)) j.equipChecked = [];
+    if (j.thankYouSent === undefined)   j.thankYouSent = false;
+    if (j.addonOffered === undefined)   j.addonOffered = false;
+    if (j.retroGood === undefined) j.retroGood = '';
+    if (j.retroBad === undefined)  j.retroBad = '';
   });
   DB.leads.forEach(l => { if (l && l.noteSketch === undefined) l.noteSketch = null; });
   DB.docs.forEach(d => {
@@ -2566,6 +2594,108 @@ function logAudit(action, kind, label){
   DB.auditLog = DB.auditLog || [];
   DB.auditLog.unshift({ at: Date.now(), action, kind, label: String(label || '').slice(0, 80) });
   if (DB.auditLog.length > 500) DB.auditLog.length = 500;
+}
+/* ==================== V4.7: "בנקים" של ערכים לבחירה מהירה ====================
+   רשימות ערכים (סוגי צילום, לוקיישנים, מקורות פנייה) שמוצעות כהשלמה אוטומטית
+   בכל שדה טקסט רלוונטי — עדיין טקסט חופשי, אבל בלי להקליד את אותו הדבר שוב ושוב. */
+const QUICK_LIST_LABELS = { kinds: 'סוגי עבודה', locations: 'לוקיישנים', sources: 'מקורות פנייה' };
+function openQuickLists(){
+  const body = el('div', { style: 'display:flex;flex-direction:column;gap:14px' });
+  Object.entries(QUICK_LIST_LABELS).forEach(([key, label]) => {
+    const box = el('div', { style: 'display:flex;flex-direction:column;gap:4px' });
+    const draw = () => {
+      box.innerHTML = '';
+      (DB.quickLists[key] || []).forEach((v, i) => {
+        const inp = el('input', { class: 'line-input', type: 'text', value: v });
+        inp.addEventListener('input', () => { DB.quickLists[key][i] = inp.value; saveDB(); });
+        box.appendChild(el('div', { class: 'row' }, [ inp,
+          el('button', { class: 'del', onclick: () => { DB.quickLists[key].splice(i, 1); saveDB(); draw(); } }, '✕') ]));
+      });
+      box.appendChild(el('button', { class: 'add-row', onclick: () => {
+        DB.quickLists[key].push(''); saveDB(); draw();
+      } }, '＋ ערך'));
+    };
+    draw();
+    body.appendChild(el('div', { class: 'cl-card' }, [ el('div', { class: 'ttl', text: label }), box ]));
+  });
+  body.appendChild(el('div', { class: 'hint',
+    text: 'הערכים כאן מוצעים אוטומטית (רשימת השלמה) בשדות המתאימים — סוג עבודה, מיקום, ומקור פנייה בלידים. אפשר עדיין להקליד כל דבר אחר.' }));
+  openModal('בנקים לבחירה מהירה', body, [ el('button', { class: 'btn primary', onclick: closeModal }, 'סגירה') ]);
+}
+let _qlDatalistSeq = 0;
+/** מצמיד datalist קיים לשדה טקסט רגיל בלי להחליף אותו — כדי לא לשבור מאזיני אירועים שכבר תלויים בו */
+function attachQuickList(inputEl, listKey){
+  const dlId = 'ql-' + listKey + '-' + (_qlDatalistSeq++);
+  inputEl.setAttribute('list', dlId);
+  const dl = el('datalist', { id: dlId });
+  (DB.quickLists[listKey] || []).forEach(v => { if (v) dl.appendChild(el('option', { value: v })); });
+  return dl;
+}
+/** input עם רשימת השלמה (datalist) מתוך בנק ערכים — עדיין טקסט חופשי לגמרי */
+function quickListInput(listKey, value, placeholder, onChange){
+  const dlId = 'ql-' + listKey + '-' + (_qlDatalistSeq++);
+  const dl = el('datalist', { id: dlId });
+  (DB.quickLists[listKey] || []).forEach(v => { if (v) dl.appendChild(el('option', { value: v })); });
+  const inp = el('input', { type: 'text', value: value || '', placeholder: placeholder || '', list: dlId });
+  inp.addEventListener('input', () => onChange(inp.value));
+  return el('span', { style: 'display:contents' }, [ inp, dl ]);
+}
+/* ==================== V4.7: עריכה מרוכזת של עבודות ====================
+   טבלה שכל השדות בה ניתנים לעריכה ישירה בשורה — לעדכן הרבה עבודות מהר,
+   בלי לפתוח את עורך העבודה המלא לכל אחת בנפרד. */
+function openBulkEditJobs(){
+  const body = el('div', { style: 'display:flex;flex-direction:column;gap:10px' });
+  let stFilter = '', from = isoOf(addDays(new Date(), -30)), to = isoOf(addDays(new Date(), 180));
+  const wrap = el('div', { class: 'imp-scroll' });
+  const draw = () => {
+    let rows = DB.jobs.filter(j => (!from || (j.iso || '') >= from) && (!to || (j.iso || '') <= to));
+    if (stFilter) rows = rows.filter(j => j.status === stFilter);
+    rows.sort((a, b) => (a.iso || '').localeCompare(b.iso || ''));
+    wrap.innerHTML = '';
+    if (!rows.length){ wrap.appendChild(el('div', { class: 'empty-note', text: 'אין עבודות בטווח/סינון שנבחרו' })); return; }
+    const table = el('table', { class: 'imp-table bulk-edit-table' });
+    table.appendChild(el('thead', {}, el('tr', {},
+      ['תאריך', 'שעה', 'שם', 'סוג', 'לקוח', 'מחיר', 'שולם', 'סטטוס', ''].map(t => el('th', { text: t })))));
+    const tbody = el('tbody');
+    rows.forEach(j => {
+      const dI = el('input', { type: 'date', class: 'ltr-num', value: j.iso || '' });
+      dI.addEventListener('change', () => { j.iso = dI.value; j.updatedAt = Date.now(); saveDB(); });
+      const tI = el('input', { type: 'text', class: 'ltr-num', style: 'width:64px', value: j.time || '' });
+      tI.addEventListener('change', () => { j.time = tI.value; saveDB(); });
+      const nI = el('input', { type: 'text', style: 'min-width:140px', value: j.title || '' });
+      nI.addEventListener('change', () => { j.title = nI.value; saveDB(); });
+      const kI = el('input', { type: 'text', style: 'width:100px', value: j.kind || '' });
+      const kDL = attachQuickList(kI, 'kinds');
+      kI.addEventListener('change', () => { j.kind = kI.value; saveDB(); });
+      const whoSel = contactPicker(() => j.who, v => { j.who = v; saveDB(); });
+      const pI = el('input', { type: 'number', style: 'width:80px', value: j.price || '' });
+      pI.addEventListener('change', () => { j.price = Number(pI.value) || 0; saveDB(); });
+      const paidI = el('input', { type: 'number', style: 'width:80px', value: j.paid || '' });
+      paidI.addEventListener('change', () => { j.paid = Number(paidI.value) || 0; saveDB(); });
+      const stSel = mkSelect(JOB_STATUS.map(s => [s.id, s.name]), j.status, v => { j.status = v; saveDB(); });
+      tbody.appendChild(el('tr', {}, [
+        el('td', {}, dI), el('td', {}, tI), el('td', {}, nI), el('td', {}, [kI, kDL]), el('td', {}, whoSel),
+        el('td', {}, pI), el('td', {}, paidI), el('td', {}, stSel),
+        el('td', {}, el('button', { class: 'del', onclick: () => {
+          if (!confirm('למחוק את העבודה?')) return;
+          trashPush('job', j.title, j, {});
+          DB.jobs = DB.jobs.filter(x => x !== j); saveDB(); draw();
+        } }, '✕'))
+      ]));
+    });
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+  };
+  const fromI = el('input', { type: 'date', value: from });
+  fromI.addEventListener('change', () => { from = fromI.value; draw(); });
+  const toI = el('input', { type: 'date', value: to });
+  toI.addEventListener('change', () => { to = toI.value; draw(); });
+  const stSelFilter = mkSelect([['', 'כל הסטטוסים']].concat(JOB_STATUS.map(s => [s.id, s.name])), '', v => { stFilter = v; draw(); });
+  body.appendChild(el('div', { class: 'field-row' }, [ field('מתאריך', fromI), field('עד תאריך', toI), field('סטטוס', stSelFilter) ]));
+  body.appendChild(el('div', { class: 'hint', text: 'כל שינוי נשמר מיד עם היציאה מהשדה — אין צורך בכפתור שמירה.' }));
+  body.appendChild(wrap);
+  draw();
+  openModal('עריכה מרוכזת — עבודות', body, [ el('button', { class: 'btn primary', onclick: closeModal }, 'סגירה') ]);
 }
 function openAuditLog(){
   const body = el('div', { style: 'display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow:auto' });
@@ -3421,12 +3551,14 @@ function renderDay(){
         ['end', 'note', 'who', 'uid', 'url'].forEach(k => { if (a[k] === undefined) a[k] = ''; });
         const handle = el('span', { class: 'drag-handle', text: '⠿', title: 'גרירה ללוח הזמנים' });
         const open = { on: !!(a.note || a.who) };
+        const whereLine = mkLine(a.where, 'מיקום', val => { a.where = val; });
+        const whereDL = attachQuickList(whereLine, 'locations');
         const row = el('div', { class: 'row' }, [
           handle,
           mkLine(a.time, 'שעה', val => { a.time = val; drawAppts(); }, 'ltr-num'),
           mkLine(a.end, 'עד', val => { a.end = val; drawAppts(); }, 'ltr-num'),
           mkLine(a.what, 'פגישה / אירוע', val => { a.what = val; }),
-          mkLine(a.where, 'מיקום', val => { a.where = val; }),
+          whereLine, whereDL,
           conflicts.has(a) ? el('span', { class: 'conflict', title: 'חופף לפגישה אחרת', text: '⚠' }) : null,
           el('button', { class: 'sub-toggle', title: 'לקוח והערות',
             text: open.on ? '▾' : '＋', onclick: () => { open.on = !open.on; more.style.display = open.on ? '' : 'none'; } }),
@@ -4652,6 +4784,7 @@ function renderSettings(){
     el('button', { class: 'btn', onclick: () => { closeDrawerGlobal(); openVersions(); } }, '🕘 היסטוריית גרסאות'),
     el('button', { class: 'btn', onclick: () => { closeDrawerGlobal(); openTrash(); } }, '🗑 סל מיחזור'),
     el('button', { class: 'btn', onclick: () => { closeDrawerGlobal(); openAuditLog(); } }, '📜 יומן פעולות'),
+    el('button', { class: 'btn', onclick: () => { closeDrawerGlobal(); openQuickLists(); } }, '📚 בנקים לבחירה מהירה'),
     el('button', { class: 'btn', onclick: exportSync }, '🔄 קובץ סנכרון'),
     el('button', { class: 'btn', onclick: importSync }, '🔀 מיזוג מקובץ'),
     el('button', { class: 'btn', onclick: exportFullICS }, '📤 ייצוא ICS מלא')
@@ -6291,11 +6424,13 @@ function editContact(c, after){
   };
   paint();
 
+  const refBy = contactPicker(() => c.referredBy, v => { c.referredBy = v; saveDB(); });
   openModal('איש קשר', [
     field('שם', mk('name', 'שם מלא')),
     el('div', { class: 'field-row' }, [ field('טלפון', mk('phone', '050-0000000', 'tel')),
                                         field('דוא״ל', mk('email', 'name@example.com', 'email')) ]),
     el('div', { class: 'field-row' }, [ field('ארגון / חברה', mk('org', '')), field('תגיות (מופרדות בפסיק)', tags) ]),
+    field('מי המליץ / הפנה אליי', refBy),
     field('יום הולדת', bcal), gRow, hRow, yRow,
     field('הערות', note)
   ], [
@@ -7615,6 +7750,8 @@ function openJobEditor(job, after){
   /* --- V4: מיקום ונסיעה, צילום חוץ, יעד מסירה וצוות --- */
   const where = el('input', { type: 'text', value: job.where || '', placeholder: 'אולם / כתובת' });
   where.addEventListener('input', () => { job.where = where.value; if (!isNew) saveDB(); });
+  const kindDL = attachQuickList(kind, 'kinds');
+  const whereDL = attachQuickList(where, 'locations');
   const travel = el('input', { type: 'number', min: '0', step: '5', value: job.travel || '',
                                placeholder: String(DB.settings.travelDefault || 30) });
   travel.addEventListener('input', () => { job.travel = Number(travel.value) || 0; if (!isNew) saveDB(); });
@@ -7716,6 +7853,7 @@ function openJobEditor(job, after){
     window.open(waHref(c.phone, txt), '_blank', 'noopener');
   } }, '💬');
   openModal(isNew ? 'עבודה חדשה' : 'עריכת עבודה', [
+    kindDL, whereDL,
     field('שם העבודה', title),
     el('div', { class: 'field-row' }, [ field('לקוח', el('div', { class: 'row' }, [ who, waBtn ])), field('סוג', kind) ]),
     el('div', { class: 'field-row' }, [ field('תאריך', date), field('שעה', time), field('סטטוס', status) ]),
@@ -7739,6 +7877,10 @@ function openJobEditor(job, after){
       el('div', { class: 'field' }, [ el('label', { text: 'הועלו תמונות ללקוח' }), photosSw ])
     ]),
     el('div', { class: 'field' }, [ el('label', { text: '🎒 רשימת ציוד' }), equipBox ]),
+    el('div', { class: 'field-row' }, [
+      field('מה עבד טוב', mkArea(job.retroGood, 'למשל: התאורה, הזמן שנקבע…', v => { job.retroGood = v; if (!isNew) saveDB(); })),
+      field('מה כדאי לשפר בפעם הבאה', mkArea(job.retroBad, '', v => { job.retroBad = v; if (!isNew) saveDB(); }))
+    ]),
     field('הערות', note)
   ], [
     el('button', { class: 'btn primary', onclick: () => {
@@ -7909,6 +8051,11 @@ function businessOverview(){
   if (ls.value) stat(money(ls.value), 'שווי פניות שנסגרו', 'good');
   if (lateDeliv.length) stat(String(lateDeliv.length), 'מסירות באיחור', 'bad', () => { closeModal(); openBusiness('jobs'); });
   box.appendChild(box.stats);
+  box.appendChild(el('div', { class: 'nav-group', style: 'flex-wrap:wrap;gap:6px;margin:6px 0' }, [
+    el('button', { class: 'btn sm', onclick: () => { closeModal(); openRevenueChart(); } }, '📈 גרף הכנסות'),
+    el('button', { class: 'btn sm', onclick: () => { closeModal(); openOccupancyHeatmap(); } }, '🗺 מפת תפוסה'),
+    el('button', { class: 'btn sm', onclick: () => { closeModal(); openExpensePie(); } }, '🥧 פילוח הוצאות')
+  ]));
 
   /* שורת "טעון תשומת לב" — רק אם יש מה להראות, כדי לא להציף כשהכול תקין */
   const flags = [];
@@ -7938,10 +8085,36 @@ function businessOverview(){
     .slice(0, 3).forEach(j => flags.push({
       text: `⭐ לבקש חוות דעת: ${j.title || 'עבודה'} (נמסרה, אין עדיין דירוג)`,
       onclick: () => { closeModal(); openJobEditor(j); } }));
+  DB.jobs.filter(j => (j.status === 'delivered' || j.status === 'paid') && !j.thankYouSent && j.iso &&
+    Math.round((fromISO(today) - fromISO(j.iso)) / 864e5) <= 14)
+    .slice(0, 3).forEach(j => flags.push({
+      text: `🙏 לשלוח תודה על מסירה: ${j.title || 'עבודה'}`,
+      onclick: () => {
+        const c = contactById(j.who);
+        if (c && c.phone){
+          window.open(waHref(c.phone, `היי ${c.name || ''}, תודה רבה שבחרת בי ל${j.title || 'הצילום'}! ` +
+            'היה לי כיף גדול, מקווה שאהבת את התוצאה 🙏'), '_blank', 'noopener');
+        }
+        j.thankYouSent = true; saveDB(); closeModal();
+      } }));
+  DB.jobs.filter(j => j.photosUploaded && !j.addonOffered && j.status !== 'booked')
+    .slice(0, 3).forEach(j => flags.push({
+      text: `🖼 להציע מוצרים נלווים (אלבום/הדפסות): ${j.title || 'עבודה'}`,
+      onclick: () => {
+        const c = contactById(j.who);
+        if (c && c.phone){
+          window.open(waHref(c.phone, `היי ${c.name || ''}, אם בא לך — יש לי גם אפשרות להזמין אלבום מודפס ` +
+            'או הדפסות מהתמונות. מוזמן/ת לשאול אם מעניין 😊'), '_blank', 'noopener');
+        }
+        j.addonOffered = true; saveDB(); closeModal();
+      } }));
   DB.jobs.filter(j => j.status === 'delivered' && !j.photosUploaded && j.iso && j.iso < today)
     .slice(0, 3).forEach(j => flags.push({
       text: `📤 תמונות לא הועלו ללקוח: ${j.title || 'עבודה'}`,
       onclick: () => { closeModal(); openJobEditor(j); } }));
+  if (Date.now() - (DB.settings.lastRateReviewAt || 0) > 365 * 864e5)
+    flags.push({ text: '💲 עברה שנה מאז שבדקת תעריפים — כדאי לבדוק אם צריך לעדכן',
+      onclick: () => { closeModal(); openPricingTrend(); DB.settings.lastRateReviewAt = Date.now(); saveDB(); } });
   recurringClientCandidates(21).slice(0, 3).forEach(r => flags.push({
     text: `🔁 לקוח חוזר: ${contactName(r.who) || 'לקוח'} — בשנה שעברה היה ב-${r.suggestedIso.split('-').reverse().join('/')} בקירוב, עדיין לא נקבע השנה`,
     onclick: () => { closeModal(); openClientCard(r.who); } }));
@@ -7994,6 +8167,7 @@ function openBusiness(tab){
     filt.appendChild(mkSelect([['', 'כל הלקוחות']].concat(DB.contacts.map(c => [c.id, c.name])), '', v => { whoFilter = v; render(); }));
     filt.appendChild(el('button', { class: 'btn sm primary', onclick: () =>
       openJobEditor(Object.assign(JOB_DEFAULT(), { iso: isoOf(State.cursor) }), () => openBusiness('jobs')) }, '＋ עבודה'));
+    filt.appendChild(el('button', { class: 'btn sm', onclick: () => { closeModal(); openBulkEditJobs(); } }, '✏ עריכה מרוכזת'));
     pane.appendChild(filt); pane.appendChild(list); render();
 
     const open = DB.jobs.filter(j => j.status !== 'paid');
@@ -8678,6 +8852,15 @@ function commandList(){
     { ic: '🏷', nm: 'מחירון ומקבצים',           grp: 'עסק',    run: openPriceList },
     { ic: '💹', nm: 'תזרים 12 חודשים',          grp: 'עסק',    run: openCashflow },
     { ic: '🧾', nm: 'דוח שנתי לרואה חשבון',      grp: 'עסק',    run: openAnnualAccountantReport },
+    { ic: '🤝', nm: 'דוח הפניות',                grp: 'עסק',    run: openReferralReport },
+    { ic: '📔', nm: 'יומן מה עבד',                grp: 'עסק',    run: openWorkedJournal },
+    { ic: '📈', nm: 'גרף הכנסות',                 grp: 'עסק',    run: openRevenueChart },
+    { ic: '🗺', nm: 'מפת תפוסה שנתית',            grp: 'עסק',    run: openOccupancyHeatmap },
+    { ic: '🥧', nm: 'פילוח הוצאות',               grp: 'עסק',    run: openExpensePie },
+    { ic: '✏', nm: 'עריכה מרוכזת — עבודות',      grp: 'עסק',    run: openBulkEditJobs },
+    { ic: '📚', nm: 'בנקים לבחירה מהירה',         grp: 'הגדרות', run: openQuickLists },
+    { ic: '🖼', nm: 'פוסטר לוח שנה חודשי להדפסה', grp: 'תצוגה',  run: () => exportMonthPoster(State.cursor) },
+    { ic: '🎁', nm: 'שובר מתנה להדפסה',           grp: 'עסק',    run: openGiftVoucher },
     { ic: '🧮', nm: 'רווחיות לעבודה',           grp: 'ניתוח',  run: openProfitability },
     { ic: '🤝', nm: 'צוות — צלם שני ועוזרים',   grp: 'עסק',    run: openCrew },
     { ic: '🌡', nm: 'עומס עונתי',               grp: 'ניתוח',  run: openSeasonMap },
@@ -9406,7 +9589,10 @@ function openSignaturePad(d, after){
   const pad = sketchPad(() => d.signature, val => { d.signature = val; saveDB(); }, { height: 160 });
   body.appendChild(pad);
   openModal('חתימת לקוח — ' + (DOC_KINDS[d.kind] || {}).name, body, [
-    el('button', { class: 'btn primary', onclick: () => { saveDB(); closeModal(); if (after) after(); } }, 'סיום'),
+    el('button', { class: 'btn primary', onclick: () => {
+      if (d.signature && d.signature.strokes && d.signature.strokes.length && d.status !== 'paid') d.status = 'signed';
+      saveDB(); closeModal(); if (after) after();
+    } }, 'סיום'),
     el('button', { class: 'btn danger', onclick: () => {
       if (!confirm('למחוק את החתימה?')) return;
       d.signature = null; saveDB(); closeModal(); if (after) after();
@@ -9661,7 +9847,149 @@ function openAvailability(){
       el('span', { html: '<i class="av-tent"></i>אופציה' }),
       el('span', { html: '<i class="av-free"></i>פנוי' })
     ])
-  ], [ el('button', { class: 'btn', onclick: () => { closeModal(); renderAll(true); } }, 'סגירה') ]);
+  ], [
+    el('button', { class: 'btn', onclick: () => exportAvailabilityPage(freeDays(new Date(), Number(rangeSel.value), opts)) },
+      '📤 עמוד תאריכים פנויים לשליחה'),
+    el('button', { class: 'btn', onclick: () => { closeModal(); renderAll(true); } }, 'סגירה')
+  ]);
+}
+/** עמוד HTML עצמאי עם התאריכים הפנויים — לשליחה ללקוח כדי שיבחר ויחזור אליך.
+    לא הזמנה חיה — רק תצוגה, ההחלטה נשארת אצלך. */
+/** פוסטר לוח שנה חודשי להדפסה — עמוד HTML עצמאי עם רשת הימים, תאריך עברי וחגים */
+/** שובר מתנה להדפסה — טופס קצר שמפיק עמוד HTML עצמאי מעוצב */
+function openGiftVoucher(){
+  const to = el('input', { type: 'text', placeholder: 'עבור' });
+  const from = el('input', { type: 'text', placeholder: 'מאת' });
+  const desc = el('input', { type: 'text', placeholder: 'תיאור החבילה / הסכום' });
+  const code = el('input', { type: 'text', value: 'GIFT-' + Math.random().toString(36).slice(2, 7).toUpperCase(), class: 'ltr-num' });
+  const validUntil = el('input', { type: 'date', value: isoOf(addDays(new Date(), 365)) });
+  openModal('שובר מתנה', [
+    field('עבור (שם המקבל)', to), field('מאת', from), field('תיאור', desc),
+    el('div', { class: 'field-row' }, [ field('קוד שובר', code), field('בתוקף עד', validUntil) ])
+  ], [
+    el('button', { class: 'btn primary', onclick: () => {
+      exportGiftVoucherPage(to.value, from.value, desc.value, code.value, validUntil.value); closeModal();
+    } }, '🖨 הפקה להדפסה'),
+    el('button', { class: 'btn', onclick: closeModal }, 'ביטול')
+  ]);
+}
+function exportGiftVoucherPage(to, from, desc, code, validUntil){
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
+  const B = DB.settings.business || {};
+  const html = `<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="utf-8">
+<title>שובר מתנה</title>
+<style>
+body{font:16px/1.5 "Segoe UI",system-ui,sans-serif;background:#f6f4ef;margin:0;padding:30px;display:flex;justify-content:center}
+.card{width:100%;max-width:560px;background:#fffdf7;border:3px solid #a8916a;border-radius:18px;padding:36px;text-align:center}
+h1{font-size:1.6em;margin:0 0 6px;color:#6d5c3d;letter-spacing:1px}
+.sub{color:#8d8474;margin-bottom:26px}
+.to{font-size:1.3em;margin:18px 0 6px}
+.desc{font-size:1.15em;margin:10px 0;color:#4a453c}
+.code{display:inline-block;margin:22px 0;padding:10px 22px;border:2px dashed #a8916a;border-radius:10px;
+  font-family:monospace;font-size:1.3em;letter-spacing:3px;color:#6d5c3d}
+.meta{color:#8d8474;font-size:.88em;margin-top:20px}
+@media print{ body{background:#fff;padding:0} }
+</style></head><body><div class="card">
+<h1>🎁 שובר מתנה</h1>
+<div class="sub">${esc(B.name || DB.settings.appName || 'מתכנן')}</div>
+${to ? `<div class="to">עבור: <b>${esc(to)}</b></div>` : ''}
+${from ? `<div class="sub">מאת: ${esc(from)}</div>` : ''}
+${desc ? `<div class="desc">${esc(desc)}</div>` : ''}
+<div class="code">${esc(code)}</div>
+${validUntil ? `<div class="meta">בתוקף עד ${esc(fromISO(validUntil).toLocaleDateString('he-IL'))}</div>` : ''}
+${B.phone || B.email ? `<div class="meta">${esc([B.phone, B.email].filter(Boolean).join(' · '))}</div>` : ''}
+</div></body></html>`;
+  const name = `שובר-מתנה-${code}.html`;
+  if (typeof DESKTOP !== 'undefined' && DESKTOP && window.plannerDesktop){
+    window.plannerDesktop.saveFile(name, html, [{ name: 'HTML', extensions: ['html'] }]).then(p => { if (p) toast('הקובץ נשמר'); });
+    return;
+  }
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const a = el('a', { href: URL.createObjectURL(blob), download: name });
+  document.body.appendChild(a); a.click(); a.remove();
+  toast('הקובץ ירד — פתח אותו והדפס');
+}
+function exportMonthPoster(date){
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
+  const y = date.getFullYear(), m = date.getMonth();
+  const first = new Date(y, m, 1), last = new Date(y, m + 1, 0);
+  const startPad = first.getDay(); // 0=ראשון
+  const cells = [];
+  for (let i = 0; i < startPad; i++) cells.push('<div class="c empty"></div>');
+  for (let d = 1; d <= last.getDate(); d++){
+    const dt = new Date(y, m, d), iso = isoOf(dt), h = hebOf(dt);
+    const hol = holidaysForISO(iso);
+    cells.push(`<div class="c${hol.length ? ' hol' : ''}${sameISO(dt, new Date()) ? ' today' : ''}">` +
+      `<div class="n">${d}</div><div class="heb">${esc(h.short)}</div>` +
+      (hol.length ? `<div class="hn">${esc(hol.map(x => x.title).join(', '))}</div>` : '') + `</div>`);
+  }
+  // גם הכותרות וגם התאים בסדר טבעי א׳(ראשון)→ש׳(שבת); direction:rtl על הגריד דואג
+  // שהפריט הראשון (א׳) ייפול מימין, כמו בלוח שנה עברי/ישראלי רגיל — שני הדברים חייבים
+  // להיות באותו סדר DOM כדי שהכותרות יתיישרו נכון מול העמודות
+  const dowHtml = DOW_SHORT.map(d => `<div class="dow">${esc(d)}</div>`).join('');
+  const html = `<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="utf-8">
+<title>${esc(GREG_MONTHS[m])} ${y}</title>
+<style>
+body{font:15px/1.4 "Segoe UI",system-ui,sans-serif;background:#fff;color:#332f28;margin:0;padding:28px}
+h1{text-align:center;margin:0 0 2px;font-size:2em;letter-spacing:.5px}
+.sub{text-align:center;color:#a8916a;margin-bottom:18px;font-size:1.1em}
+.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;direction:rtl}
+.dow{text-align:center;font-weight:700;color:#a8916a;padding:4px 0;font-size:.9em}
+.c{border:1px solid #e2dac8;border-radius:8px;min-height:86px;padding:6px;position:relative}
+.c.empty{border:none}
+.c.today{background:#f4eddd;border-color:#a8916a}
+.c.hol{background:#fdf6e8}
+.n{font-weight:700;font-size:1.15em}
+.heb{font-size:.72em;color:#8d8474}
+.hn{font-size:.68em;color:#96603c;margin-top:3px;font-weight:600}
+.foot{text-align:center;margin-top:20px;color:#9a9186;font-size:.82em}
+@media print{ body{padding:8px} }
+</style></head><body>
+<h1>${esc(GREG_MONTHS[m])} ${y}</h1>
+<div class="sub">${esc(hebOf(first).yLabel)}</div>
+<div class="grid">${dowHtml}${cells.join('')}</div>
+<div class="foot">${esc(DB.settings.appName || 'מתכנן')}</div>
+</body></html>`;
+  const name = `לוח-${GREG_MONTHS[m]}-${y}.html`;
+  if (typeof DESKTOP !== 'undefined' && DESKTOP && window.plannerDesktop){
+    window.plannerDesktop.saveFile(name, html, [{ name: 'HTML', extensions: ['html'] }]).then(p => { if (p) toast('הקובץ נשמר'); });
+    return;
+  }
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const a = el('a', { href: URL.createObjectURL(blob), download: name });
+  document.body.appendChild(a); a.click(); a.remove();
+  toast('הקובץ ירד — פתח אותו והדפס');
+}
+function exportAvailabilityPage(rows){
+  if (!rows.length) return toast('אין ימים פנויים להצגה');
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
+  const itemsHtml = rows.slice(0, 150).map(r =>
+    `<div class="d"><b>${DOW_LONG[r.d.getDay()]}</b> ${r.d.getDate()}/${r.d.getMonth() + 1}/${r.d.getFullYear()} ` +
+    `<span class="h">${esc(hebOf(r.d).short)}</span></div>`).join('');
+  const html = `<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="utf-8">
+<title>תאריכים פנויים — ${esc(DB.settings.appName || 'מתכנן')}</title>
+<style>
+body{font:16px/1.6 "Segoe UI",system-ui,sans-serif;background:#f6f4ef;color:#2b2722;margin:0;padding:26px}
+.wrap{max-width:560px;margin:0 auto;background:#fff;border-radius:14px;padding:26px;box-shadow:0 2px 18px #0001}
+h1{margin:0 0 4px;font-size:1.4em}.sub{color:#8a8073;margin-bottom:20px}
+.d{padding:10px 12px;border-bottom:1px solid #eee;font-size:1.05em}
+.d .h{color:#a8916a;font-size:.85em;margin-inline-start:8px}
+.foot{margin-top:22px;color:#9a9186;font-size:.85em;border-top:1px solid #eee;padding-top:12px}
+</style></head><body><div class="wrap">
+<h1>תאריכים פנויים</h1>
+<div class="sub">רשימת התאריכים הפנויים אצלי — נא לבחור ולחזור אליי כדי לקבוע.</div>
+${itemsHtml}
+<div class="foot">${esc(DB.settings.appName || 'מתכנן')} · הופק ב-${esc(new Date().toLocaleDateString('he-IL'))}</div>
+</div></body></html>`;
+  const name = `תאריכים-פנויים-${todayISO()}.html`;
+  if (typeof DESKTOP !== 'undefined' && DESKTOP && window.plannerDesktop){
+    window.plannerDesktop.saveFile(name, html, [{ name: 'HTML', extensions: ['html'] }]).then(p => { if (p) toast('הקובץ נשמר'); });
+    return;
+  }
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const a = el('a', { href: URL.createObjectURL(blob), download: name });
+  document.body.appendChild(a); a.click(); a.remove();
+  toast('הקובץ ירד — אפשר לשלוח אותו ללקוח');
 }
 
 /* ==================== 6. שכבות תאריכים (חופשות וכו׳) ==================== */
@@ -11053,6 +11381,8 @@ function openLeadEditor(lead, after){
   const ph = el('input', { type: 'tel', value: lead.phone, placeholder: 'טלפון', dir: 'ltr' });
   const src = el('input', { type: 'text', value: lead.source, placeholder: 'המלצה / אינסטגרם / אתר' });
   const kd = el('input', { type: 'text', value: lead.kind, placeholder: 'חתונה / בר מצווה / תדמית' });
+  const srcDL = attachQuickList(src, 'sources');
+  const kdDL = attachQuickList(kd, 'kinds');
   const d1 = el('input', { type: 'date', value: lead.iso || todayISO() });
   const d2 = el('input', { type: 'date', value: lead.eventIso || '' });
   const pr = el('input', { type: 'number', value: lead.price || '', placeholder: '0' });
@@ -11066,6 +11396,7 @@ function openLeadEditor(lead, after){
   };
 
   openModal(isNew ? 'פנייה חדשה' : 'עריכת פנייה', [
+    srcDL, kdDL,
     el('div', { class: 'field-row' }, [ field('שם', nm), field('טלפון', ph) ]),
     el('div', { class: 'field-row' }, [ field('מקור הפנייה', src), field('סוג האירוע', kd) ]),
     el('div', { class: 'field-row' }, [ field('תאריך הפנייה', d1), field('תאריך האירוע', d2) ]),
@@ -13821,6 +14152,147 @@ function openLeadROI(){
   body.appendChild(el('div', { class: 'hint',
     text: 'המקור נלקח משדה "מקור הפנייה" בכל פנייה. ההכנסה נספרת רק מפניות שנסגרו לעבודה.' }));
   openModal('תשואה לפי מקור פנייה', body, [ el('button', { class: 'btn', onclick: closeModal }, 'סגירה') ]);
+}
+
+/* ==================== V4.7: גרפים (SVG טהור, בלי ספרייה חיצונית) ==================== */
+/** גרף הכנסות חודשי — 12 חודשים אחרונים, עמודות */
+function openRevenueChart(){
+  const months = [];
+  const now = new Date();
+  for (let i = 11; i >= 0; i--){
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const from = isoOf(d), to = isoOf(new Date(d.getFullYear(), d.getMonth() + 1, 0));
+    let sum = DB.finance.filter(f => f.kind === 'in' && f.iso >= from && f.iso <= to)
+      .reduce((s, f) => s + Number(f.amount || 0), 0);
+    sum += DB.jobs.filter(j => j.iso && j.iso >= from && j.iso <= to).reduce((s, j) => s + Number(j.paid || 0), 0);
+    months.push({ label: GREG_MONTHS[d.getMonth()].slice(0, 3) + "׳" + String(d.getFullYear()).slice(2), sum });
+  }
+  const max = Math.max(1, ...months.map(m => m.sum));
+  const W = 760, H = 260, pad = 30, bw = (W - pad * 2) / months.length;
+  const bars = months.map((m, i) => {
+    const h = Math.round((m.sum / max) * (H - 60));
+    const x = pad + i * bw + bw * 0.15, w = bw * 0.7, y = H - 30 - h;
+    return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="var(--accent)"><title>${m.label}: ${money(m.sum)}</title></rect>` +
+      `<text x="${x + w / 2}" y="${H - 12}" font-size="10" text-anchor="middle" fill="var(--ink-soft)">${m.label}</text>` +
+      (m.sum ? `<text x="${x + w / 2}" y="${y - 4}" font-size="10" text-anchor="middle" fill="var(--ink)">${Math.round(m.sum / 1000) || (m.sum ? '<1' : '')}${m.sum >= 1000 ? 'k' : ''}</text>` : '');
+  }).join('');
+  const svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;font-family:inherit">${bars}</svg>`;
+  openModal('גרף הכנסות — 12 חודשים אחרונים', [
+    el('div', {}, [Object.assign(document.createElement('div'), { innerHTML: svg })]),
+    el('div', { class: 'hint', text: 'כולל תשלומים על עבודות ותנועות כספיות מסוג הכנסה.' })
+  ], [ el('button', { class: 'btn', onclick: closeModal }, 'סגירה') ]);
+}
+/** מפת חום תפוסה — כל השנה, עוצמת צבע לפי כמות פריטים ביום */
+function openOccupancyHeatmap(){
+  const year = State.cursor.getFullYear();
+  const cellsByMonth = [];
+  for (let m = 0; m < 12; m++){
+    const first = new Date(year, m, 1), days = new Date(year, m + 1, 0).getDate();
+    const startPad = first.getDay();
+    let cells = '';
+    for (let i = 0; i < startPad; i++) cells += `<div class="oh-c empty"></div>`;
+    for (let d = 1; d <= days; d++){
+      const iso = isoOf(new Date(year, m, d));
+      const n = jobsForISO(iso).length + (DB.days[iso] && (DB.days[iso].appts || []).filter(a => a && (a.what || '').trim()).length || 0);
+      const lvl = n === 0 ? 0 : n === 1 ? 1 : n === 2 ? 2 : 3;
+      cells += `<div class="oh-c lvl${lvl}" title="${d}/${m + 1}: ${n} פריטים">${d}</div>`;
+    }
+    cellsByMonth.push(`<div class="oh-month"><div class="oh-mn">${GREG_MONTHS[m]}</div><div class="oh-grid">${cells}</div></div>`);
+  }
+  const wrap = document.createElement('div');
+  wrap.className = 'oh-wrap';
+  wrap.innerHTML = cellsByMonth.join('');
+  openModal(`מפת תפוסה — ${year}`, [
+    el('div', { class: 'field-row' }, [
+      el('button', { class: 'btn sm', onclick: () => { State.cursor = addDays(State.cursor, -365); openOccupancyHeatmap(); } }, '‹ שנה קודמת'),
+      el('button', { class: 'btn sm', onclick: () => { State.cursor = addDays(State.cursor, 365); openOccupancyHeatmap(); } }, 'שנה הבאה ›')
+    ]),
+    wrap,
+    el('div', { class: 'oh-legend' }, [
+      el('span', { html: '<i class="oh-c lvl0" style="width:12px;height:12px;display:inline-block"></i> פנוי' }),
+      el('span', { html: '<i class="oh-c lvl1" style="width:12px;height:12px;display:inline-block"></i> פריט אחד' }),
+      el('span', { html: '<i class="oh-c lvl2" style="width:12px;height:12px;display:inline-block"></i> שניים' }),
+      el('span', { html: '<i class="oh-c lvl3" style="width:12px;height:12px;display:inline-block"></i> עמוס' })
+    ])
+  ], [ el('button', { class: 'btn', onclick: closeModal }, 'סגירה') ]);
+}
+/** תרשים עוגה של הוצאות לפי קטגוריה — 12 חודשים אחרונים */
+function openExpensePie(){
+  const from = isoOf(addDays(new Date(), -365));
+  const byCat = {};
+  DB.finance.filter(f => f.kind === 'out' && f.iso >= from).forEach(f => {
+    const cat = (f.cat || 'אחר').trim() || 'אחר';
+    byCat[cat] = (byCat[cat] || 0) + Number(f.amount || 0);
+  });
+  const entries = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+  const total = entries.reduce((s, [, v]) => s + v, 0);
+  if (!total){
+    openModal('פילוח הוצאות', [ el('div', { class: 'empty-note', text: 'אין הוצאות מסווגות בשנה האחרונה' }) ],
+      [ el('button', { class: 'btn', onclick: closeModal }, 'סגירה') ]);
+    return;
+  }
+  const colors = ['#a8916a', '#8f5f5f', '#556080', '#6f5680', '#5c6a51', '#4f7070', '#b98a4f', '#7a4a63'];
+  let angle = 0;
+  const R = 90, CX = 110, CY = 110;
+  const arcs = entries.map(([cat, v], i) => {
+    const frac = v / total, a0 = angle, a1 = angle + frac * Math.PI * 2;
+    angle = a1;
+    const x0 = CX + R * Math.sin(a0), y0 = CY - R * Math.cos(a0);
+    const x1 = CX + R * Math.sin(a1), y1 = CY - R * Math.cos(a1);
+    const large = frac > 0.5 ? 1 : 0;
+    return `<path d="M${CX},${CY} L${x0.toFixed(1)},${y0.toFixed(1)} A${R},${R} 0 ${large} 1 ${x1.toFixed(1)},${y1.toFixed(1)} Z" ` +
+      `fill="${colors[i % colors.length]}"><title>${cat}: ${money(v)}</title></path>`;
+  }).join('');
+  const svg = `<svg viewBox="0 0 220 220" style="width:220px;height:220px">${arcs}</svg>`;
+  const legend = entries.map(([cat, v], i) => el('div', { class: 'row', style: 'gap:6px;font-size:.85em' }, [
+    el('span', { style: `width:11px;height:11px;border-radius:3px;background:${colors[i % colors.length]};display:inline-block` }),
+    el('span', { style: 'flex:1', text: cat }),
+    el('span', { style: 'font-weight:700', text: money(v) + ' (' + Math.round(v / total * 100) + '%)' })
+  ]));
+  const svgWrap = document.createElement('div'); svgWrap.innerHTML = svg;
+  openModal('פילוח הוצאות — 12 חודשים אחרונים', [
+    el('div', { style: 'display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap' }, [
+      svgWrap, el('div', { style: 'display:flex;flex-direction:column;gap:5px;flex:1;min-width:180px' }, legend)
+    ])
+  ], [ el('button', { class: 'btn', onclick: closeModal }, 'סגירה') ]);
+}
+/** יומן "מה עבד" מרוכז — כל הרשומות מכל העבודות במקום אחד, כדי לאתר דפוסים */
+function openWorkedJournal(){
+  const body = el('div', { style: 'display:flex;flex-direction:column;gap:8px;max-height:65vh;overflow:auto' });
+  const rows = DB.jobs.filter(j => (j.retroGood || '').trim() || (j.retroBad || '').trim())
+    .sort((a, b) => (b.iso || '').localeCompare(a.iso || ''));
+  if (!rows.length) body.appendChild(el('div', { class: 'empty-note', text: 'עדיין אין רשומות — ממלאים בעריכת עבודה, בתחתית המסך' }));
+  rows.forEach(j => body.appendChild(el('div', { class: 'cl-card', onclick: () => { closeModal(); openJobEditor(j); } }, [
+    el('div', { class: 'ttl', text: `${j.title || 'עבודה'} · ${j.iso ? j.iso.split('-').reverse().join('/') : ''}` }),
+    j.retroGood ? el('div', { style: 'font-size:.85em;color:var(--ok)', text: '👍 ' + j.retroGood }) : null,
+    j.retroBad ? el('div', { style: 'font-size:.85em;color:var(--danger)', text: '🔧 ' + j.retroBad }) : null
+  ])));
+  openModal('יומן מה עבד', body, [ el('button', { class: 'btn', onclick: closeModal }, 'סגירה') ]);
+}
+/** דוח הפניות — מי המליץ למי, וכמה הכנסה הגיעה דרך כל ממליץ */
+function openReferralReport(){
+  const body = el('div', { style: 'display:flex;flex-direction:column;gap:12px' });
+  const byRef = {};
+  DB.contacts.forEach(c => {
+    if (!c.referredBy) return;
+    const g = byRef[c.referredBy] = byRef[c.referredBy] || { count: 0, revenue: 0 };
+    g.count++;
+    g.revenue += clientHistory(c.id).income;
+  });
+  const rows = Object.entries(byRef).sort((a, b) => b[1].revenue - a[1].revenue);
+  if (!rows.length){
+    body.appendChild(el('div', { class: 'empty-note', text: 'אין עדיין אנשי קשר עם "מי המליץ" ממולא' }));
+  } else {
+    body.appendChild(el('div', { class: 'imp-scroll' }, el('table', { class: 'imp-table' }, [
+      el('thead', {}, el('tr', {}, ['ממליץ', 'לקוחות שהביא', 'הכנסה שהגיעה דרכם'].map(t => el('th', { text: t })))),
+      el('tbody', {}, rows.map(([refId, g]) => el('tr', { onclick: () => { closeModal(); openClientCard(refId); } },
+        [ el('td', { style: 'cursor:pointer;color:var(--accent-ink)', text: contactName(refId) || '(נמחק)' }),
+          el('td', { class: 'd', text: String(g.count) }),
+          el('td', { class: 'd', style: 'font-weight:700', text: money(g.revenue) }) ])))
+    ])));
+  }
+  body.appendChild(el('div', { class: 'hint', text: 'ממולא בכרטיס איש הקשר, בשדה "מי המליץ / הפנה אליי".' }));
+  openModal('דוח הפניות', body, [ el('button', { class: 'btn', onclick: closeModal }, 'סגירה') ]);
 }
 
 /* ==================== 6. הוצאות קבועות חוזרות ==================== */
