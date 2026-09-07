@@ -1,0 +1,66 @@
+{
+  "id": "/planner-v3",
+  "name": "דשבורד מתכנן — יומי · שבועי · חודשי · שנתי",
+  "short_name": "מתכנן",
+  "description": "מתכנן אישי יומי, שבועי, חודשי ושנתי עם לוח עברי ולועזי, חגים, פרשת שבוע, זמני היום, אנשי קשר וניהול סטודיו",
+  "lang": "he",
+  "dir": "rtl",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui", "browser"],
+  "orientation": "any",
+  "background_color": "#efe9dd",
+  "theme_color": "#a8926b",
+  "categories": ["productivity", "lifestyle", "utilities"],
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "היום",
+      "short_name": "היום",
+      "description": "פתיחה בתצוגת היום",
+      "url": "./index.html?view=day",
+      "icons": [{ "src": "assets/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "אג׳נדה",
+      "short_name": "אג׳נדה",
+      "description": "מה קרוב",
+      "url": "./index.html?view=agenda",
+      "icons": [{ "src": "assets/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "כל המשימות",
+      "short_name": "משימות",
+      "description": "כל המשימות הפתוחות",
+      "url": "./index.html?view=tasks",
+      "icons": [{ "src": "assets/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
