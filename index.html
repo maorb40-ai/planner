@@ -150,6 +150,17 @@ html[data-theme="dark"]{
   --sel: rgba(127,155,255,.16);
 }
 
+body.high-contrast{
+  --ink-soft: var(--ink);
+  --line: var(--line-strong);
+  --field-line: var(--line-strong);
+  --grid-line: var(--line-strong);
+}
+body.high-contrast, body.high-contrast .card{ font-weight: 500; }
+body.high-contrast .btn, body.high-contrast input, body.high-contrast select, body.high-contrast textarea{
+  border-width: 1.5px !important;
+}
+
 *, *::before, *::after{ box-sizing: border-box; }
 html, body{ height: 100%; }
 
@@ -1764,7 +1775,7 @@ body.sidenav-on .app-bar{ padding-inline-end: 222px; }
 
 <header class="app-bar no-print">
   <div class="brand">
-    <b id="brandName">מתכנן</b><span>V4.5 · יומי · שבועי · חודשי · שנתי</span>
+    <b id="brandName">מתכנן</b><span>V4.6 · יומי · שבועי · חודשי · שנתי</span>
   </div>
 
   <div class="tabs" role="tablist" id="tabs">
@@ -3394,7 +3405,13 @@ function renderDay(){
             el('span', { style: 'font-size:.78em;color:var(--ink-soft)', text: 'לקוח' }),
             contactPicker(() => a.who, v => { a.who = v; }),
             a.who ? el('button', { class: 'btn sm ghost', title: 'כרטיס לקוח',
-              onclick: () => openClientCard(a.who) }, '👤') : null
+              onclick: () => openClientCard(a.who) }, '👤') : null,
+            (a.who && (contactById(a.who) || {}).phone) ? el('a', { class: 'btn sm ghost', title: 'שליחת תזכורת בוואטסאפ',
+              target: '_blank', rel: 'noopener',
+              href: waHref(contactById(a.who).phone,
+                `היי${contactById(a.who).name ? ' ' + contactById(a.who).name : ''}, תזכורת ל${a.what || 'פגישה'}` +
+                (a.time ? ' בשעה ' + a.time : '') + ` בתאריך ${fromISO(iso).toLocaleDateString('he-IL')}` +
+                (a.where ? ', ב' + a.where : '') + '.') }, '💬 תזכורת') : null
           ]),
           noteA,
           a.url ? el('a', { href: a.url, target: '_blank', rel: 'noopener',
@@ -3674,7 +3691,7 @@ function renderDay(){
       el('button', { class: 'btn sm ghost', title: 'ניהול תזכורות שנתיות', onclick: openAnnualReminders }, '🔔')
     ]);
   };
-  builders.onthisday = () => card('היום לפני שנה', 'c4', onThisDayCard(iso));
+  builders.onthisday = () => DB.settings.onThisDay === false ? null : card('היום לפני שנה', 'c4', onThisDayCard(iso));
 
   builders.files = () => card('קבצים מצורפים', 'c6', filesCard(iso));
   builders.voice = () => card('הערות קוליות', 'c4', voiceCard(iso));
@@ -4212,7 +4229,15 @@ function renderSettings(){
         .map(c => el('i', { style: 'background:' + c }))),
     el('span', { text: '🎨 אישית' })
   ]));
-
+  const activePremium = PREMIUM_THEMES.find(t => t.id === S.theme);
+  if (activePremium){
+    const vars = deriveFullTheme(activePremium);
+    picker.appendChild(el('button', { class: 'theme-opt', 'aria-pressed': 'true', onclick: openPremiumThemeGallery }, [
+      el('div', { class: 'theme-swatch' },
+        [vars['--bg'], vars['--accent'], vars['--panel']].map(c => el('i', { style: 'background:' + c }))),
+      el('span', { text: '✨ ' + activePremium.name })
+    ]));
+  }
   const g1 = el('div', { class: 'set-group' }, [ el('h4', { text: 'עיצוב ותצוגה' }) ]);
   const nameInput = el('input', { type: 'text', class: 'box', value: S.appName || 'מתכנן',
                                   placeholder: 'שם הדשבורד', style: 'flex:1' });
@@ -4220,10 +4245,14 @@ function renderSettings(){
   g1.appendChild(setRow('שם הדשבורד', nameInput,
     'מופיע בכותרת החלון, בסרגל העליון ובראש הדפים המודפסים'));
   g1.appendChild(picker);
+  g1.appendChild(el('button', { class: 'btn', style: 'margin:2px 0 8px', onclick: openPremiumThemeGallery },
+    '✨ גלריית ערכות יוקרה (20 ערכות)'));
   g1.appendChild(setRow('מצב לוח', mkSelect([['greg', 'לועזי'], ['hebrew', 'עברי'], ['combined', 'משולב']],
     S.calMode, v => { S.calMode = v; syncCalModeSeg(); saveDB(); renderAll(); })));
   g1.appendChild(setRow('גודל גופן', mkSelect([[0.9, 'קטן'], [1, 'רגיל'], [1.1, 'גדול'], [1.25, 'גדול מאוד']],
     S.fontScale, v => { S.fontScale = Number(v); applyTheme(); saveDB(); })));
+  g1.appendChild(setRow('ניגודיות גבוהה', mkSwitch(S.highContrast, v => { S.highContrast = v; saveDB(); applyHighContrast(); }),
+    'קווים וטקסט משני מודגשים יותר, לקריאה נוחה יותר בתאורה חזקה או למי שזקוק לניגודיות גבוהה'));
   g1.appendChild(setRow('הצג זמני היום', mkSwitch(S.showZmanim, v => { S.showZmanim = v; saveDB(); renderAll(); })));
   g1.appendChild(setRow('קו "עכשיו" בלוח הזמנים', mkSwitch(S.showNowLine, v => { S.showNowLine = v; saveDB(); renderAll(); })));
   g1.appendChild(setRow('סרגל ניווט צדדי', mkSwitch(S.sideNav, v => {
@@ -4240,7 +4269,7 @@ function renderSettings(){
   g1.appendChild(setRow('מעבר לערכה כהה בשקיעה',
     mkSwitch(S.autoDarkSunset, v => {
       S.autoDarkSunset = v;
-      if (v && S.theme !== 'night') S.dayTheme = S.theme;
+      if (v && S.theme !== 'dark') S.dayTheme = S.theme;
       saveDB(); _autoDarkApplied = null; applyAutoDark();
     }), 'לפי זמני השקיעה והזריחה האמיתיים של המיקום שהוגדר'));
   g1.appendChild(setRow('הוספה מהירה בעברית (Ctrl+N)',
@@ -4368,10 +4397,24 @@ function renderSettings(){
 
   /* --- התראות --- */
   const gN = el('div', { class: 'set-group' }, [ el('h4', { text: 'התראות ותזכורות' }) ]);
-  gN.appendChild(setRow('התראות פעילות', mkSwitch(S.notify, async v => {
+  const notifBlocked = 'Notification' in window && Notification.permission === 'denied';
+  if (notifBlocked){
+    gN.appendChild(el('div', { class: 'hint',
+      style: 'background:var(--danger-soft,var(--accent-soft));color:var(--danger,var(--ink));padding:8px 11px;border-radius:9px',
+      text: '🔒 התראות חסומות ברמת הדפדפן/המערכת עבור הדף הזה — לכן המתג לא ניתן להפעלה. ' +
+            'צריך לאשר ידנית: בדפדפן, לחץ על סמל המנעול ליד הכתובת ← אתר זה ← התראות ← אפשר. ' +
+            'אחרי זה המתג כאן יתעורר לבד.' }));
+  }
+  const notifSwitch = mkSwitch(S.notify, async v => {
     if (v && !(await Notif.enable())){ renderSettings(); return; }
     S.notify = v; saveDB(); renderSettings();
-  }), 'ההתראות פועלות כל עוד הדף פתוח. התראות ברקע יתאפשרו בגרסת האנדרואיד'));
+  });
+  if (notifBlocked){
+    notifSwitch.querySelector('input').disabled = true;
+    notifSwitch.style.opacity = '.45'; notifSwitch.title = 'חסום ברמת הדפדפן — ראה הסבר למעלה';
+  }
+  gN.appendChild(setRow('התראות פעילות', notifSwitch,
+    'ההתראות פועלות כל עוד הדף פתוח. התראות ברקע יתאפשרו בגרסת האנדרואיד'));
   gN.appendChild(setRow('כמה דקות מראש', mkSelect([[5, '5'], [10, '10'], [15, '15'], [30, '30']],
     S.notifyMinutes, v => { S.notifyMinutes = Number(v); saveDB(); })));
   gN.appendChild(setRow('הקראה קולית', mkSwitch(S.notifyVoice, v => { S.notifyVoice = v; saveDB(); })));
@@ -4502,11 +4545,22 @@ function renderSettings(){
     (typeof DESKTOP !== 'undefined' && DESKTOP)
       ? 'בגרסת המחשב הגיבוי מתבצע לבד לתיקיית הנתונים — אין צורך בתזכורת'
       : 'תזכורת עדינה בפינה, עם כפתור גיבוי מיידי'));
-  if (typeof DESKTOP !== 'undefined' && DESKTOP)
+  if (typeof DESKTOP !== 'undefined' && DESKTOP){
     gS.appendChild(setRow('כמה גיבויים מתגלגלים לשמור',
       mkSelect([[3, '3'], [7, '7'], [14, '14'], [30, '30']], S.deskBackupKeep,
         v => { S.deskBackupKeep = Number(v); saveDB(); }),
       'נשמרים בתיקיית backups שליד קובץ הנתונים'));
+    const traySw = mkSwitch(true, v => window.plannerDesktop.setTrayEnabled(v));
+    const autoSw = mkSwitch(false, v => window.plannerDesktop.setAutoLaunch(v));
+    gS.appendChild(setRow('סמל במגש המערכת', traySw,
+      'סגירת החלון תמזער למגש במקום לצאת מהתוכנה — כדי שסנכרון והתראות ימשיכו ברקע. ' +
+      'יציאה אמיתית: מהתפריט של הסמל, או קובץ ← יציאה'));
+    gS.appendChild(setRow('הפעלה אוטומטית עם עליית Windows', autoSw));
+    window.plannerDesktop.getStartupPrefs().then(p => {
+      traySw.querySelector('input').checked = p.trayEnabled;
+      autoSw.querySelector('input').checked = p.autoLaunch;
+    });
+  }
   gS.appendChild(setRow('בדיקת תקינות נתונים',
     el('button', { class: 'btn sm', onclick: () => { closeDrawer(); openIntegrity(); } }, 'סריקה'),
     'מאתר פגישות כפולות, שיוכים שבורים, רשומות ריקות, אנשי קשר כפולים ועוד'));
@@ -6026,6 +6080,13 @@ function contactInitials(name){
   return (parts[0][0] + (parts[1] ? parts[1][0] : '')).toUpperCase();
 }
 const telHref = p => 'tel:' + String(p || '').replace(/[^\d+]/g, '');
+/** קישור וואטסאפ ללקוח — ממיר מספר ישראלי מקומי (05X...) לפורמט בינלאומי */
+function waHref(phone, text){
+  const n = normPhone(phone); // כבר בלי אפס מוביל
+  if (!n) return '';
+  const intl = n.startsWith('972') ? n : '972' + n;
+  return 'https://wa.me/' + intl + (text ? '?text=' + encodeURIComponent(text) : '');
+}
 
 function contactsMatching(q){
   const n = String(q || '').trim().toLowerCase();
@@ -6068,6 +6129,7 @@ function contactRow(c, onChange, compact){
   const bits = [c.phone, c.email, c.org].filter(Boolean).join(' · ');
   const acts = el('div', { class: 'acts' });
   if (c.phone) acts.appendChild(el('a', { class: 'btn sm', href: telHref(c.phone), title: 'חיוג' }, '📞'));
+  if (c.phone) acts.appendChild(el('a', { class: 'btn sm', href: waHref(c.phone), target: '_blank', rel: 'noopener', title: 'וואטסאפ' }, '💬'));
   if (c.email) acts.appendChild(el('a', { class: 'btn sm', href: 'mailto:' + c.email, title: 'שליחת דוא״ל' }, '✉'));
   acts.appendChild(el('button', { class: 'btn sm', title: 'קביעת פגישה עם איש הקשר היום',
     onclick: () => {
@@ -7494,9 +7556,17 @@ function openJobEditor(job, after){
   };
   drawCrew();
 
+  const waBtn = el('button', { class: 'btn sm ghost', title: 'שליחת תזכורת בוואטסאפ ללקוח', onclick: () => {
+    const c = contactById(job.who);
+    if (!c || !c.phone) return toast('לא נבחר לקוח עם טלפון');
+    const txt = `היי ${c.name || ''}, תזכורת ל${job.title || 'הצילום'}` +
+                (job.iso ? ' בתאריך ' + fromISO(job.iso).toLocaleDateString('he-IL') : '') +
+                (job.time ? ' בשעה ' + job.time : '') + (job.where ? ', ב' + job.where : '') + '.';
+    window.open(waHref(c.phone, txt), '_blank', 'noopener');
+  } }, '💬');
   openModal(isNew ? 'עבודה חדשה' : 'עריכת עבודה', [
     field('שם העבודה', title),
-    el('div', { class: 'field-row' }, [ field('לקוח', who), field('סוג', kind) ]),
+    el('div', { class: 'field-row' }, [ field('לקוח', el('div', { class: 'row' }, [ who, waBtn ])), field('סוג', kind) ]),
     el('div', { class: 'field-row' }, [ field('תאריך', date), field('שעה', time), field('סטטוס', status) ]),
     el('div', { class: 'field-row' }, [ field('מחיר', price), field('שולם', paid) ]),
     el('div', { class: 'field-row' }, [
@@ -7631,6 +7701,30 @@ function timeReport(fromIso, toIso){
 
 /* ======================= מרכז הסטודיו: עבודות, כספים, שעות ======================= */
 /** רצועת סקירה בראש מסך הסטודיו — המספרים שחשוב לראות בלי לחפש בין הלשוניות */
+/** לקוחות "חוזרים" — מי שהייתה לו עבודה בערך באותו תאריך בשנה שעברה,
+    ועדיין אין לו עבודה מתוכננת השנה בטווח המקביל (כמו לקוחות פורים
+    שחוזרים כל שנה לאותה תקופה בערך). */
+function recurringClientCandidates(windowDays){
+  const win = windowDays || 21;
+  const today = fromISO(todayISO());
+  const targetFrom = today, targetTo = addDays(today, win);
+  const out = [];
+  const seen = new Set();
+  DB.jobs.forEach(j => {
+    if (!j.iso || !j.who) return;
+    const jd = fromISO(j.iso);
+    const nextOccurrence = new Date(jd.getFullYear() + 1, jd.getMonth(), jd.getDate());
+    if (nextOccurrence < targetFrom || nextOccurrence > targetTo) return;
+    const key = j.who + '|' + jd.getMonth() + '|' + jd.getDate();
+    if (seen.has(key)) return;
+    const already = DB.jobs.some(x => x !== j && x.who === j.who && x.iso &&
+      Math.abs(fromISO(x.iso) - nextOccurrence) < 20 * 864e5);
+    if (already) return;
+    seen.add(key);
+    out.push({ who: j.who, lastJob: j, suggestedIso: isoOf(nextOccurrence) });
+  });
+  return out.sort((a, b) => a.suggestedIso.localeCompare(b.suggestedIso));
+}
 function businessOverview(){
   const box = el('div', { class: 'biz-overview' });
   const today = todayISO();
@@ -7683,6 +7777,9 @@ function businessOverview(){
       flags.push({ text: `📋 התאריך ${w.iso.split('-').reverse().join('/')} פנוי — ${w.name || ''} ממתין/ה לו`,
         onclick: () => { closeModal(); openWaitlist(); } });
   });
+  recurringClientCandidates(21).slice(0, 3).forEach(r => flags.push({
+    text: `🔁 לקוח חוזר: ${contactName(r.who) || 'לקוח'} — בשנה שעברה היה ב-${r.suggestedIso.split('-').reverse().join('/')} בקירוב, עדיין לא נקבע השנה`,
+    onclick: () => { closeModal(); openClientCard(r.who); } }));
   if (flags.length){
     box.appendChild(el('div', { class: 'biz-flags' },
       flags.slice(0, 4).map(f => el('div', { class: 'biz-flag', onclick: f.onclick }, f.text))));
@@ -9049,6 +9146,15 @@ function editDoc(d, after){
     el('button', { class: 'btn', onclick: () => openSignaturePad(d, () => editDoc(d, after)) },
       (d.signature && d.signature.strokes && d.signature.strokes.length) ? '✍ חתימה נקלטה' : '✍ הוספת חתימה'),
     el('button', { class: 'btn', onclick: () => printDoc(d) }, '🖨 הדפסה / PDF'),
+    el('button', { class: 'btn', title: 'פותח הודעת וואטסאפ מוכנה ללקוח עם סכום המסמך — לשליחה ידנית של קישור ביט/פייבוקס מהטלפון שלך',
+      onclick: () => {
+        const c = contactById(d.who);
+        if (!c || !c.phone) return toast('לא נבחר לקוח עם טלפון');
+        const t = docTotals(d);
+        const txt = `היי ${c.name || ''}, ${DOC_KINDS[d.kind].name} מספר ${d.number} על סך ${money(Math.round(t.total))} — ` +
+                    'אפשר לשלוח לי ביט/פייבוקס בבקשה 🙏';
+        window.open(waHref(c.phone, txt), '_blank', 'noopener');
+      } }, '💬 בקשת תשלום'),
     el('button', { class: 'btn danger', onclick: () => {
       if (!confirm('למחוק את המסמך?')) return;
       trashPush('doc', DOC_KINDS[d.kind].name + ' ' + d.number, d, {});
@@ -9721,7 +9827,169 @@ function openMorningReview(){
   ]);
 }
 
-/* ==================== 14. עורך ערכת נושא אישית ==================== */
+/* ==================== 14. ערכות נושא יוקרתיות (V4.6) ====================
+   20 ערכות שנחקרו לפי טרנדים ופלטות מותגי יוקרה אמיתיים (שחור-זהב-שנהב,
+   נייבי-פלטינה, ירוק יער ומטאלי, אבני חן כהות, טרה-קוטה חמימה וכו׳) —
+   כל ערכה מוגדרת רק ע״י כמה צבעי ליבה, והשאר (רקעי משנה, צללים, קווים,
+   6 צבעי קטגוריה) נגזר אוטומטית כדי לשמור על עקביות איכות בלי לכתוב
+   ידנית מאות גוונים. */
+function clamp01(n){ return Math.max(0, Math.min(1, n)); }
+function hexToRgb(h){
+  h = String(h || '#888888').replace('#', '');
+  if (h.length === 3) h = h.split('').map(c => c + c).join('');
+  const n = parseInt(h, 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+function rgbToHex(r, g, b){
+  const h = n => Math.round(clamp01(n / 255) * 255).toString(16).padStart(2, '0');
+  return '#' + h(r) + h(g) + h(b);
+}
+function mixHex(a, b, t){
+  const A = hexToRgb(a), B = hexToRgb(b);
+  return rgbToHex(A.r + (B.r - A.r) * t, A.g + (B.g - A.g) * t, A.b + (B.b - A.b) * t);
+}
+function relLuma(hex){
+  const { r, g, b } = hexToRgb(hex);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+}
+/** בסיס משותף לצללים ולצבעי קטגוריה, לפי בהיר/כהה — כדי שכל ערכה תישאר
+    עקבית ונוחה לקריאה, גם כשצבעי המותג עצמם שונים מאוד בין ערכה לערכה */
+const THEME_MODE_BASE = {
+  light: {
+    danger: '#b4675f', ok: '#7d9070',
+    shabbat: '#e9e3f2', shabbatInk: '#5c4f7a',
+    holiday: '#f3e2d4', holidayInk: '#96603c',
+    today: '#dfe9df', todayInk: '#4d6a4d',
+    cats: [['#e3e7dc', '#5c6a51'], ['#f4e3e3', '#8f5f5f'], ['#dfe4ef', '#556080'],
+           ['#ece1ef', '#6f5680'], ['#f2e8da', '#8a6f4a'], ['#dde8e8', '#4f7070']]
+  },
+  dark: {
+    danger: '#f0736d', ok: '#57c08a',
+    shabbat: '#2a2743', shabbatInk: '#b7abf0',
+    holiday: '#3a2b26', holidayInk: '#f0ac86',
+    today: '#1e3a30', todayInk: '#6fd3a3',
+    cats: [['#21322a', '#7fca9d'], ['#33242a', '#e8919f'], ['#222b3d', '#93b1ee'],
+           ['#2c2540', '#bda6ee'], ['#332c1f', '#e0b57b'], ['#1f3134', '#7fc9c9']]
+  }
+};
+/** ערכה מלאה מתוך כמה צבעי ליבה בלבד: bg, panel, ink, accent, accentInk, isDark */
+function deriveFullTheme(core){
+  const isDark = !!core.isDark;
+  const M = THEME_MODE_BASE[isDark ? 'dark' : 'light'];
+  const bg = core.bg, panel = core.panel, ink = core.ink;
+  const panel2 = core.panel2 || mixHex(panel, bg, 0.5);
+  const panel3 = mixHex(panel2, bg, 0.5);
+  const inkSoft = core.inkSoft || mixHex(ink, bg, 0.45);
+  const inkStrong = core.inkStrong || mixHex(ink, isDark ? '#ffffff' : '#000000', 0.16);
+  const line = core.line || mixHex(panel, ink, 0.9);
+  const lineStrong = mixHex(panel, ink, 0.76);
+  const accent = core.accent, accentInk = core.accentInk;
+  const accentSoft = core.accentSoft || mixHex(panel, accent, 0.16);
+  const accentContrast = core.accentContrast || (relLuma(accent) > 0.55 ? '#241d10' : '#fffdf7');
+  const sh = a => ink + a; // 8-digit hex-alpha, נתמך בכל דפדפן מודרני
+  return {
+    '--bg': bg, '--panel': panel, '--panel-2': panel2, '--panel-3': panel3,
+    '--ink': ink, '--ink-strong': inkStrong, '--ink-soft': inkSoft,
+    '--line': line, '--line-strong': lineStrong,
+    '--accent': accent, '--accent-ink': accentInk, '--accent-soft': accentSoft, '--accent-contrast': accentContrast,
+    '--danger': M.danger, '--ok': M.ok,
+    '--shabbat': M.shabbat, '--shabbat-ink': M.shabbatInk,
+    '--holiday': M.holiday, '--holiday-ink': M.holidayInk,
+    '--today': M.today, '--today-ink': M.todayInk,
+    '--shadow-sm': `0 1px 2px ${sh('14')}`,
+    '--shadow': `0 2px 6px ${sh('10')}, 0 14px 32px -20px ${sh('55')}`,
+    '--shadow-lg': `0 10px 44px -14px ${sh('50')}`,
+    '--head-bg': accentSoft, '--head-ink': accentInk,
+    '--c1': M.cats[0][0], '--c1i': M.cats[0][1], '--c2': M.cats[1][0], '--c2i': M.cats[1][1],
+    '--c3': M.cats[2][0], '--c3i': M.cats[2][1], '--c4': M.cats[3][0], '--c4i': M.cats[3][1],
+    '--c5': M.cats[4][0], '--c5i': M.cats[4][1], '--c6': M.cats[5][0], '--c6i': M.cats[5][1],
+    '--field-line': line, '--grid-line': line, '--sel': accent + '28'
+  };
+}
+/** 20 ערכות יוקרה — מבוססות מחקר על פלטות מותגי יוקרה ומגמות עיצוב
+    (שאנל: שחור־זהב־שנהב; קרטייה: ירוק אזמרגד־זהב עתיק; הרמס: שנהב חם;
+    אבני חן כהות; טרה-קוטה וחול מדבר; נייבי־פלטינה וכו׳). */
+const PREMIUM_THEMES = [
+  { id: 'pt-noir-gold', name: 'שחור וזהב', isDark: true,
+    bg: '#0e0d0b', panel: '#17140f', ink: '#e9e1cf', accent: '#c9a24a', accentInk: '#f3dfa8' },
+  { id: 'pt-emerald-brass', name: 'אזמרגד מלכותי', isDark: true,
+    bg: '#0b1712', panel: '#12241c', ink: '#dcece4', accent: '#2f9e6e', accentInk: '#8fe0bb' },
+  { id: 'pt-bordeaux', name: 'יין בורדו', isDark: true,
+    bg: '#170a0e', panel: '#241016', ink: '#eeddd6', accent: '#8a1f3c', accentInk: '#e79bb0' },
+  { id: 'pt-midnight-platinum', name: 'חצות ופלטינה', isDark: true,
+    bg: '#0c0f18', panel: '#141827', ink: '#e4e7f1', accent: '#8b9bc4', accentInk: '#c7d0ea' },
+  { id: 'pt-sapphire', name: 'ספיר עמוק', isDark: true,
+    bg: '#0a1120', panel: '#101a30', ink: '#dde6f7', accent: '#2f5fbf', accentInk: '#9fbdf5' },
+  { id: 'pt-ruby', name: 'רובי מלכותי', isDark: true,
+    bg: '#160a0d', panel: '#241014', ink: '#f0dfe1', accent: '#c22a45', accentInk: '#f2a3b3' },
+  { id: 'pt-amethyst', name: 'אמטיסט', isDark: true,
+    bg: '#130c1c', panel: '#1e1430', ink: '#e9e2f5', accent: '#8b5cc9', accentInk: '#cbaef0' },
+  { id: 'pt-forest-gold', name: 'יער וזהב (רולקס)', isDark: true,
+    bg: '#0c130e', panel: '#131f16', ink: '#e2ecdf', accent: '#b8860b', accentInk: '#e8c46a' },
+  { id: 'pt-charcoal-steel', name: 'פחם ופלדה', isDark: true,
+    bg: '#111214', panel: '#1a1c1f', ink: '#e6e7e9', accent: '#7d92a8', accentInk: '#b7c6d6' },
+  { id: 'pt-black-cherry', name: 'דובדבן שחור', isDark: true,
+    bg: '#130a0d', panel: '#1f1114', ink: '#ecdfe1', accent: '#9c2b3e', accentInk: '#e59bab' },
+  { id: 'pt-deep-ocean', name: 'אוקיינוס עמוק', isDark: true,
+    bg: '#081416', panel: '#0f2226', ink: '#d9ecee', accent: '#1f8f8f', accentInk: '#7fd8d8' },
+  { id: 'pt-dark-pearl', name: 'פנינה כהה', isDark: true,
+    bg: '#121316', panel: '#1c1e22', ink: '#e8e9ec', accent: '#a6a9b4', accentInk: '#d6d8e0' },
+  { id: 'pt-ivory-gold', name: 'שנהב ושמפניה', isDark: false,
+    bg: '#f7f1e4', panel: '#fffcf4', ink: '#3a3225', accent: '#b8860b', accentInk: '#7a5a08' },
+  { id: 'pt-marble-gold', name: 'שיש לבן וזהב', isDark: false,
+    bg: '#f4f2ee', panel: '#ffffff', ink: '#332f2a', accent: '#a9812f', accentInk: '#7a5c1f' },
+  { id: 'pt-terracotta', name: 'טרה-קוטה חמימה', isDark: false,
+    bg: '#f3e6da', panel: '#fdf6ef', ink: '#4a3226', accent: '#c36f4e', accentInk: '#8a4630' },
+  { id: 'pt-desert-sand', name: 'חול מדבר', isDark: false,
+    bg: '#f1e6d3', panel: '#fbf5e9', ink: '#4a4130', accent: '#b98a4f', accentInk: '#7d5c31' },
+  { id: 'pt-rose-gold', name: 'רוז גולד', isDark: false,
+    bg: '#f7ece8', panel: '#fffaf8', ink: '#4a3530', accent: '#b8766a', accentInk: '#834f45' },
+  { id: 'pt-camel-navy', name: 'קאמל ותכלת', isDark: false,
+    bg: '#f2ece0', panel: '#fffdf7', ink: '#332f28', accent: '#2c4166', accentInk: '#1c2c48' },
+  { id: 'pt-champagne-plum', name: 'שמפניה ושזיף', isDark: false,
+    bg: '#f5ecec', panel: '#fffbf9', ink: '#3f2f38', accent: '#7a4a63', accentInk: '#543243' },
+  { id: 'pt-royal-teal', name: 'טורקיז מלכים', isDark: false,
+    bg: '#eaf1ee', panel: '#fbfefc', ink: '#233531', accent: '#1f7a6c', accentInk: '#155448' }
+];
+const PREMIUM_ALL_VARS = Object.keys(deriveFullTheme(PREMIUM_THEMES[0]));
+function clearPremiumVars(){
+  const root = document.documentElement;
+  PREMIUM_ALL_VARS.forEach(v => root.style.removeProperty(v));
+}
+function applyPremiumTheme(id){
+  const t = PREMIUM_THEMES.find(x => x.id === id);
+  if (!t) return;
+  const vars = deriveFullTheme(t);
+  document.documentElement.setAttribute('data-theme', t.isDark ? 'dark' : 'cream');
+  clearPremiumVars();
+  const root = document.documentElement;
+  Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
+}
+function openPremiumThemeGallery(){
+  const grid = el('div', { class: 'color-grid', style: 'grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px' });
+  PREMIUM_THEMES.forEach(t => {
+    const vars = deriveFullTheme(t);
+    grid.appendChild(el('button', { class: 'theme-opt', style: 'width:100%',
+      'aria-pressed': String(DB.settings.theme === t.id),
+      onclick: () => {
+        DB.settings.theme = t.id; DB.settings.customTheme = null;
+        saveDB(); applyTheme(); closeModal(); renderSettings();
+      } }, [
+      el('div', { class: 'theme-swatch' }, [
+        el('i', { style: 'background:' + vars['--bg'] }),
+        el('i', { style: 'background:' + vars['--accent'] }),
+        el('i', { style: 'background:' + vars['--panel'] })
+      ]),
+      el('span', { text: t.name })
+    ]));
+  });
+  openModal('גלריית ערכות יוקרה', [
+    el('div', { class: 'hint', text: '20 ערכות שנבנו לפי מחקר על פלטות של מותגי יוקרה ומגמות עיצוב 2026 — לחיצה מחילה מיד.' }),
+    grid
+  ], [ el('button', { class: 'btn primary', onclick: closeModal }, 'סגירה') ]);
+}
+
+/* ==================== 14ב. עורך ערכת נושא אישית ==================== */
 const THEME_VARS = [
   ['--bg', 'רקע'], ['--panel', 'כרטיסים'], ['--panel-2', 'רקע משני'],
   ['--ink', 'טקסט'], ['--ink-strong', 'טקסט מודגש'], ['--ink-soft', 'טקסט משני'],
@@ -11982,7 +12250,7 @@ function applyAutoDark(){
   const dark = nowMin >= (toMin(z.sunset) || 1e6) || nowMin < (toMin(z.sunrise) || 0);
   if (_autoDarkApplied === dark) return;
   _autoDarkApplied = dark;
-  const want = dark ? 'night' : (DB.settings.dayTheme || 'cream');
+  const want = dark ? 'dark' : (DB.settings.dayTheme || 'cream');
   if (DB.settings.theme !== want){
     if (!dark && !DB.settings.dayTheme) return;
     DB.settings.theme = want; saveDB(); applyTheme();
@@ -12036,6 +12304,9 @@ const Split = {
 function applyDensity(){
   document.body.classList.toggle('compact', DB.settings.density === 'compact');
 }
+function applyHighContrast(){
+  document.body.classList.toggle('high-contrast', !!DB.settings.highContrast);
+}
 
 /* ==================== 26. מקשי קיצור ומסך עזרה ==================== */
 const SHORTCUTS = [
@@ -12084,6 +12355,23 @@ async function desktopRollingBackup(){
     const r = await D.backupDaily(DB.settings.deskBackupKeep || 7);
     if (r && r.ok && !r.skipped){ DB.settings.lastBackupAt = Date.now(); saveDB(); }
   } catch(e){}
+}
+/** אם ההתראות דלוקות בהגדרות אבל הדפדפן עדיין לא ביקש/קיבל אישור בפועל —
+    מציע שוב בכל פתיחה, כדי שההגדרה לא תישאר "דלוקה" בלי לעבוד בפועל.
+    כשההרשאה כבר denied (המשתמש סירב בעבר) אי אפשר לבקש שוב מקוד — זה
+    מוסבר בנפרד בהגדרות, כי רק אישור ידני בדפדפן יכול לשנות את זה. */
+function checkNotifyReminder(){
+  if (!DB.settings.notify || !('Notification' in window)) return;
+  if (Notification.permission !== 'default') return;
+  setTimeout(() => {
+    const bar = el('div', { class: 'backup-nudge' }, [
+      el('span', { text: '🔔 התראות פעילות בהגדרות, אבל הדפדפן עוד לא אישר אותן בפועל' }),
+      el('button', { class: 'btn sm primary', onclick: async () => { await Notif.enable(); bar.remove(); } }, 'אישור התראות'),
+      el('button', { class: 'btn sm ghost', onclick: () => bar.remove() }, 'לא עכשיו')
+    ]);
+    document.body.appendChild(bar);
+    setTimeout(() => bar.classList.add('show'), 40);
+  }, 3000);
 }
 function checkBackupReminder(){
   if (typeof DESKTOP !== 'undefined' && DESKTOP){ desktopRollingBackup(); return; }
@@ -13793,9 +14081,14 @@ scanIntegrity = function(){
 /* ======================= 13. ניווט, טעינה ואתחול ======================= */
 function applyTheme(){
   const t = DB.settings.theme;
-  document.documentElement.setAttribute('data-theme', t === 'custom' ? 'cream' : t);
+  if (String(t).startsWith('pt-')){
+    applyPremiumTheme(t);
+  } else {
+    clearPremiumVars();
+    document.documentElement.setAttribute('data-theme', t === 'custom' ? 'cream' : t);
+    applyCustomTheme();
+  }
   document.documentElement.style.setProperty('--font-scale', DB.settings.fontScale);
-  applyCustomTheme();
   applyReadOnly();
 }
 function closeDrawerGlobal(){
@@ -14114,6 +14407,7 @@ async function bootAfterUnlock(){
   setupSwipe();
   /* --- V4 --- */
   applyDensity();
+  applyHighContrast();
   applyUndoDepth();
   wireQuickAddButton();
   applyAutoDark();
@@ -14125,6 +14419,15 @@ async function bootAfterUnlock(){
   window.addEventListener('resize', debounce(paintNextUpBar, 200));  // גובה הסרגל משתנה בגלישת שורה
   Sync.start();                // סנכרון ברשת המקומית
   checkBackupReminder();
+  checkNotifyReminder();
+  /* פקודות מהתפריט הראשי / מגש המערכת / קיצור גלובלי בגרסת המחשב —
+     הערוץ הזה היה קיים ב-preload אך אף אחד לא האזין לו בפועל */
+  if (typeof DESKTOP !== 'undefined' && DESKTOP && window.plannerDesktop.onMenu){
+    window.plannerDesktop.onMenu(what => {
+      if (what === 'print') window.print();
+      if (what === 'quickadd') openQuickAdd();
+    });
+  }
   setInterval(updateNowLines, 60000);
   loadWeather().then(m => { if (m) renderAll(true); });
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')){
