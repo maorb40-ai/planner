@@ -1799,7 +1799,7 @@ body.sidenav-on .app-bar{ padding-inline-end: 222px; }
 
 <header class="app-bar no-print">
   <div class="brand">
-    <b id="brandName">מתכנן</b><span>V4.7 · יומי · שבועי · חודשי · שנתי</span>
+    <b id="brandName">מתכנן</b><span>V4.7.1 · יומי · שבועי · חודשי · שנתי</span>
   </div>
 
   <div class="tabs" role="tablist" id="tabs">
@@ -4364,7 +4364,9 @@ function setRow(label, control, hint){
 function mkSwitch(checked, onChange){
   const inp = el('input', { type: 'checkbox', checked });
   inp.addEventListener('change', () => onChange(inp.checked));
-  return el('span', { class: 'switch' }, [ inp, el('i') ]);
+  // label ולא span: כדי שלחיצה על העיצוב החזותי (<i>) תעביר את הקליק בפועל
+  // לתיבת הסימון הנסתרת מתחתיו — בלי label, קליק על מתג כבוי לא היה עושה כלום
+  return el('label', { class: 'switch' }, [ inp, el('i') ]);
 }
 function mkSelect(opts, value, onChange){
   const s = el('select');
