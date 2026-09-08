@@ -1799,7 +1799,7 @@ body.sidenav-on .app-bar{ padding-inline-end: 222px; }
 
 <header class="app-bar no-print">
   <div class="brand">
-    <b id="brandName">מתכנן</b><span>V4.7.1 · יומי · שבועי · חודשי · שנתי</span>
+    <b id="brandName">מתכנן</b><span>V4.7.2 · יומי · שבועי · חודשי · שנתי</span>
   </div>
 
   <div class="tabs" role="tablist" id="tabs">
@@ -12997,6 +12997,25 @@ function checkNotifyReminder(){
     setTimeout(() => bar.classList.add('show'), 40);
   }, 3000);
 }
+/** תזכורת אם עבר הרבה זמן מאז ייבוא אחרון מיומן חיצוני — רלוונטי בעיקר למי
+    שממשיך לייבא קובץ ידנית ולא (או עדיין לא) עבר לפיד היומן החי בגרסת המחשב. */
+function checkImportStaleReminder(){
+  const entries = Object.values(DB.importLog || {});
+  if (!entries.length) return; // אף פעם לא יובא כלום — אין מה להזכיר
+  const lastAt = Math.max(...entries.map(e => e.at || 0));
+  if (!lastAt) return;
+  const days = Math.floor((Date.now() - lastAt) / 864e5);
+  if (days < 21) return;
+  setTimeout(() => {
+    const bar = el('div', { class: 'backup-nudge' }, [
+      el('span', { text: `📅 לא יובא יומן חיצוני כבר ${days} ימים` }),
+      el('button', { class: 'btn sm primary', onclick: () => { bar.remove(); importCalendarFiles(); } }, 'ייבוא עכשיו'),
+      el('button', { class: 'btn sm ghost', onclick: () => bar.remove() }, 'לא עכשיו')
+    ]);
+    document.body.appendChild(bar);
+    setTimeout(() => bar.classList.add('show'), 40);
+  }, 4000);
+}
 function checkBackupReminder(){
   if (typeof DESKTOP !== 'undefined' && DESKTOP){ desktopRollingBackup(); return; }
   if (!backupDue()) return;
@@ -15237,6 +15256,7 @@ async function bootAfterUnlock(){
   Sync.start();                // סנכרון ברשת המקומית
   checkBackupReminder();
   checkNotifyReminder();
+  checkImportStaleReminder();
   /* פקודות מהתפריט הראשי / מגש המערכת / קיצור גלובלי בגרסת המחשב —
      הערוץ הזה היה קיים ב-preload אך אף אחד לא האזין לו בפועל */
   if (typeof DESKTOP !== 'undefined' && DESKTOP && window.plannerDesktop.onMenu){
