@@ -1458,10 +1458,32 @@ td.qp, .m-cell.qp{ background:repeating-linear-gradient(45deg,transparent,transp
 .wall-t{ font-size:clamp(1.3rem,3.4vw,2.4rem); font-weight:800; min-width:clamp(80px,10vw,150px); }
 .wall-what{ font-size:clamp(1.05rem,2.4vw,1.8rem); font-weight:600; }
 .wall-sub{ font-size:clamp(.8rem,1.5vw,1.1rem); color:var(--ink-soft); }
-.wall-empty{ font-size:clamp(1.1rem,3vw,2rem); color:var(--ink-soft); text-align:center; padding:40px; }
+.wall-empty{ font-size:clamp(1rem,2.4vw,1.5rem); color:var(--ink-soft); text-align:center; padding:18px; }
 .wall-tasks{ margin-top:22px; }
 .wall-tasks h4{ font-size:clamp(.95rem,1.8vw,1.3rem); color:var(--ink-soft); margin:0 0 9px; }
 .wall-task{ font-size:clamp(.95rem,1.9vw,1.4rem); padding:4px 0; }
+.wall-stats{ display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:clamp(10px,1.6vw,18px);
+  margin-bottom:clamp(18px,3vw,30px); }
+.wall-stat{ background:var(--panel); border:1px solid var(--line); border-radius:18px;
+  padding:clamp(12px,1.6vw,20px) clamp(14px,2vw,22px); box-shadow:var(--shadow); display:flex; align-items:center; gap:12px; }
+.wall-stat .ic{ font-size:clamp(1.6rem,3vw,2.3rem); }
+.wall-stat .v{ font-size:clamp(1.15rem,2.4vw,1.7rem); font-weight:800; line-height:1.15; }
+.wall-stat .k{ font-size:clamp(.68rem,1.2vw,.82rem); color:var(--ink-soft); }
+.wall-grid{ display:grid; grid-template-columns:1.5fr 1fr; gap:clamp(14px,2.4vw,26px); align-items:start; }
+@media (max-width:820px){ .wall-grid{ grid-template-columns:1fr; } }
+.wall-section-title{ font-size:clamp(1rem,2vw,1.25rem); font-weight:800; margin:0 0 12px; color:var(--accent-ink); }
+.wall-side{ display:flex; flex-direction:column; gap:clamp(12px,2vw,18px); }
+.wall-card{ background:var(--panel); border:1px solid var(--line); border-radius:18px;
+  padding:clamp(14px,2vw,20px) clamp(16px,2.2vw,22px); box-shadow:var(--shadow-sm); }
+.wall-card h4{ margin:0 0 10px; font-size:clamp(.72rem,1.3vw,.85rem); color:var(--ink-soft); font-weight:800;
+  letter-spacing:.3px; }
+.wall-card .big{ font-size:clamp(1.6rem,3.2vw,2.3rem); font-weight:800; color:var(--accent-ink); line-height:1.1; }
+.wall-card .sub{ font-size:clamp(.78rem,1.4vw,.95rem); color:var(--ink-soft); margin-top:2px; }
+.wall-upcoming-day{ font-size:clamp(.72rem,1.3vw,.85rem); color:var(--ink-soft); font-weight:700;
+  margin:10px 0 4px; }
+.wall-upcoming-day:first-child{ margin-top:0; }
+.wall-upcoming-row{ display:flex; gap:10px; padding:3px 0; font-size:clamp(.88rem,1.6vw,1.05rem); }
+.wall-upcoming-row .t{ font-weight:700; color:var(--accent-ink); min-width:44px; }
 .wall-foot{ margin-top:22px; padding-top:14px; border-top:1px solid var(--line);
   font-size:clamp(.85rem,1.6vw,1.2rem); color:var(--ink-soft); }
 
@@ -1799,7 +1821,7 @@ body.sidenav-on .app-bar{ padding-inline-end: 222px; }
 
 <header class="app-bar no-print">
   <div class="brand">
-    <b id="brandName">מתכנן</b><span>V4.7.2 · יומי · שבועי · חודשי · שנתי</span>
+    <b id="brandName">מתכנן</b><span>V4.7.3 · יומי · שבועי · חודשי · שנתי</span>
   </div>
 
   <div class="tabs" role="tablist" id="tabs">
@@ -12784,18 +12806,57 @@ const Wall = {
       }
     } catch(e){}
   },
+  statCard(icon, value, label){
+    return el('div', { class: 'wall-stat' }, [
+      el('div', { class: 'ic', text: icon }),
+      el('div', {}, [ el('div', { class: 'v ltr-num', text: value }), el('div', { class: 'k', text: label }) ])
+    ]);
+  },
+  card(title, kids){
+    return el('div', { class: 'wall-card' }, [ el('h4', { text: title }) ].concat(kids));
+  },
+  /** תצוגת "השבוע הקרוב" — כשאין כלום היום, במקום מסך ריק מראים את הפריטים הבאים */
+  upcomingPreview(fromIso, days, limit){
+    const out = [];
+    for (let n = 1; n <= days && out.length < limit; n++){
+      const iso = isoOf(addDays(fromISO(fromIso), n)), rec = DB.days[iso] || {};
+      const dayItems = [];
+      jobsForISO(iso).forEach(j => dayItems.push({ min: toMin(j.time), t: j.time, what: '📷 ' + (j.title || 'עבודה') }));
+      (rec.appts || []).forEach(a => { if (a && (a.what || '').trim())
+        dayItems.push({ min: toMin(a.time), t: a.time, what: a.what }); });
+      dayItems.sort((a, b) => (a.min == null ? 1e6 : a.min) - (b.min == null ? 1e6 : b.min));
+      if (dayItems.length) out.push({ iso, items: dayItems.slice(0, 4) });
+    }
+    return out;
+  },
   paint(){
     const box = $('#wallBody'); if (!box) return;
     const now = new Date(), iso = todayISO(), h = hebOf(now), rec = DB.days[iso] || {};
     box.innerHTML = '';
+    const sunW = startOfWeek(now), parasha = parashaForWeek(sunW);
     box.appendChild(el('div', { class: 'wall-head' }, [
       el('div', { class: 'wall-clock ltr-num', text: pad2(now.getHours()) + ':' + pad2(now.getMinutes()) }),
       el('div', {}, [
         el('div', { class: 'wall-date', text: `${DOW_LONG[now.getDay()]} · ${now.toLocaleDateString('he-IL')}` }),
-        el('div', { class: 'wall-heb', text: h.full })
+        el('div', { class: 'wall-heb', text: h.full + (parasha ? ' · ' + parashaLabel(parasha) : '') })
       ])
     ]));
 
+    /* --- שורת סטטיסטיקות: מזג אוויר, זריחה/שקיעה, שעת זהב/כחולה --- */
+    const z = zmanimForISO(iso), w = wxFor(iso), ph = photoHours(z);
+    const stats = el('div', { class: 'wall-stats' });
+    if (w) stats.appendChild(this.statCard((WX_CODES[w.code] || ['🌤',''])[0], `${w.hi}°/${w.lo}°`,
+      'מזג אוויר' + (w.rain != null ? ` · גשם ${w.rain}%` : '')));
+    if (z && z.sunrise) stats.appendChild(this.statCard('🌅', z.sunrise, 'זריחה'));
+    if (z && z.sunset) stats.appendChild(this.statCard('🌇', z.sunset, 'שקיעה'));
+    if (ph) stats.appendChild(this.statCard('📸', `${ph.goldenPM[0]}–${ph.goldenPM[1]}`, 'שעת זהב ערב'));
+    if (ph) stats.appendChild(this.statCard('💙', `${ph.bluePM[0]}–${ph.bluePM[1]}`, 'שעה כחולה ערב'));
+    if (stats.children.length) box.appendChild(stats);
+
+    const grid = el('div', { class: 'wall-grid' });
+
+    /* --- עמודה ראשית: לוח היום, ואם ריק — תצוגת השבוע הקרוב --- */
+    const main = el('div');
     const items = [];
     jobsForISO(iso).forEach(j => items.push({ min: toMin(j.time), t: j.time, what: '📷 ' + (j.title || 'עבודה'),
                                               sub: [contactName(j.who), j.where].filter(Boolean).join(' · ') }));
@@ -12805,42 +12866,73 @@ const Wall = {
     });
     items.sort((a, b) => (a.min == null ? 1e6 : a.min) - (b.min == null ? 1e6 : b.min));
     const nowMin = now.getHours() * 60 + now.getMinutes();
-    const list = el('div', { class: 'wall-list' });
-    if (!items.length) list.appendChild(el('div', { class: 'wall-empty', text: 'אין אירועים היום' }));
-    items.forEach(it => {
-      const past = it.min != null && it.min < nowMin - 30;
-      list.appendChild(el('div', { class: 'wall-row' + (past ? ' past' : '') +
-          (it.min != null && it.min >= nowMin && it.min < nowMin + 90 ? ' next' : '') }, [
-        el('div', { class: 'wall-t ltr-num', text: it.t || '—' }),
-        el('div', { class: 'grow' }, [ el('div', { class: 'wall-what', text: it.what }),
-                                       it.sub ? el('div', { class: 'wall-sub', text: it.sub }) : null ])
-      ]));
-    });
-    box.appendChild(list);
-
+    main.appendChild(el('div', { class: 'wall-section-title', text: 'היום' }));
+    if (!items.length){
+      const upcoming = this.upcomingPreview(iso, 10, 4);
+      if (!upcoming.length){
+        main.appendChild(el('div', { class: 'wall-empty', text: 'אין אירועים קרובים' }));
+      } else {
+        main.appendChild(el('div', { class: 'wall-empty', text: 'אין אירועים היום — הנה מה שקרוב' }));
+        const wrap = el('div', { class: 'wall-card' });
+        upcoming.forEach(day => {
+          const d = fromISO(day.iso);
+          wrap.appendChild(el('div', { class: 'wall-upcoming-day',
+            text: `${DOW_LONG[d.getDay()]}, ${d.getDate()}/${d.getMonth() + 1}` }));
+          day.items.forEach(it => wrap.appendChild(el('div', { class: 'wall-upcoming-row' }, [
+            el('span', { class: 't ltr-num', text: it.t || '—' }), el('span', { text: it.what })
+          ])));
+        });
+        main.appendChild(wrap);
+      }
+    } else {
+      const list = el('div', { class: 'wall-list' });
+      items.forEach(it => {
+        const past = it.min != null && it.min < nowMin - 30;
+        list.appendChild(el('div', { class: 'wall-row' + (past ? ' past' : '') +
+            (it.min != null && it.min >= nowMin && it.min < nowMin + 90 ? ' next' : '') }, [
+          el('div', { class: 'wall-t ltr-num', text: it.t || '—' }),
+          el('div', { class: 'grow' }, [ el('div', { class: 'wall-what', text: it.what }),
+                                         it.sub ? el('div', { class: 'wall-sub', text: it.sub }) : null ])
+        ]));
+      });
+      main.appendChild(list);
+    }
     const open = (rec.todos || []).filter(t => t && !t.d && (t.t || '').trim());
     if (open.length){
-      box.appendChild(el('div', { class: 'wall-tasks' }, [
+      main.appendChild(el('div', { class: 'wall-tasks' }, [
         el('h4', { text: `משימות פתוחות (${open.length})` }),
         el('div', {}, open.slice(0, 6).map(t => el('div', { class: 'wall-task', text: '☐ ' + t.t })))
       ]));
     }
-    const z = zmanimForISO(iso);
-    const w = wxFor(iso);
-    const foot = el('div', { class: 'wall-foot-wrap' });
-    if (z && z.sunset){
-      foot.appendChild(el('div', { class: 'wall-foot',
-        html: `זריחה <b dir="ltr">${z.sunrise || '—'}</b> · שקיעה <b dir="ltr">${z.sunset}</b>` +
-              (w ? ` · ${(WX_CODES[w.code] || ['·',''])[0]} <b dir="ltr">${w.hi}°/${w.lo}°</b>` +
-                   (w.rain != null ? ` · גשם ${w.rain}%` : '') : '') }));
-      const ph = photoHours(z);
-      if (ph) foot.appendChild(el('div', { class: 'wall-foot', style: 'font-size:.86em;opacity:.85',
-        html: `📸 שעת זהב בוקר <b dir="ltr">${ph.goldenAM[0]}–${ph.goldenAM[1]}</b> · ` +
-              `שעה כחולה בוקר <b dir="ltr">${ph.blueAM[0]}–${ph.blueAM[1]}</b><br>` +
-              `שעת זהב ערב <b dir="ltr">${ph.goldenPM[0]}–${ph.goldenPM[1]}</b> · ` +
-              `שעה כחולה ערב <b dir="ltr">${ph.bluePM[0]}–${ph.bluePM[1]}</b>` }));
-    }
-    box.appendChild(foot);
+    grid.appendChild(main);
+
+    /* --- עמודה צדדית: תמונת מצב עסקית --- */
+    const side = el('div', { class: 'wall-side' });
+    const weekTo = isoOf(addDays(now, 7));
+    const jobsWeek = DB.jobs.filter(j => j.iso && j.iso >= iso && j.iso <= weekTo).length;
+    const monthFrom = iso.slice(0, 8) + '01';
+    const monthIncome = DB.jobs.filter(j => j.iso && j.iso >= monthFrom).reduce((s, j) => s + Number(j.paid || 0), 0) +
+      DB.finance.filter(f => f.kind === 'in' && f.iso >= monthFrom).reduce((s, f) => s + Number(f.amount || 0), 0);
+    side.appendChild(this.card('📅 השבוע הקרוב', [
+      el('div', { class: 'big ltr-num', text: String(jobsWeek) }),
+      el('div', { class: 'sub', text: 'עבודות מתוכננות' })
+    ]));
+    side.appendChild(this.card('💰 החודש', [
+      el('div', { class: 'big ltr-num', text: money(monthIncome) }),
+      el('div', { class: 'sub', text: 'הכנסה עד כה' })
+    ]));
+    const hol = nextMajorHoliday(iso);
+    if (hol) side.appendChild(this.card('🎉 החג הבא', [
+      el('div', { class: 'big', text: hol.name }),
+      el('div', { class: 'sub ltr-num', text: `עוד ${hol.days} ימים` })
+    ]));
+    const azk = azkarotUpcoming().slice(0, 3);
+    if (azk.length) side.appendChild(this.card('🕯 אזכרות קרובות', azk.map(a =>
+      el('div', { class: 'wall-upcoming-row' }, [
+        el('span', { class: 't ltr-num', text: 'עוד ' + a.inDays }), el('span', { text: a.name || '' })
+      ]))));
+    grid.appendChild(side);
+    box.appendChild(grid);
   }
 };
 
