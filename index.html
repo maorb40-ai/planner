@@ -1828,7 +1828,7 @@ body.sidenav-on .app-bar{ padding-inline-end: 222px; }
 
 <header class="app-bar no-print">
   <div class="brand">
-    <b id="brandName">מתכנן</b><span>V4.9 · יומי · שבועי · חודשי · שנתי</span>
+    <b id="brandName">מתכנן</b><span>V4.9.1 · יומי · שבועי · חודשי · שנתי</span>
   </div>
 
   <div class="tabs" role="tablist" id="tabs">
@@ -4549,7 +4549,7 @@ function renderSettings(){
       S.havdalahMinutes, v => { S.havdalahMinutes = Number(v); onLocationChange(); }),
     'למנהג עדות המזרח בארץ נהוג בין 20 ל-30 דקות. 42 ו-72 הן חומרות של מנהג אשכנז.'));
   g3.appendChild(setRow('בדיקת זמני שבת',
-    el('button', { class: 'btn sm', onclick: () => { closeDrawer(); openZmanimCheck(); } }, 'השוואה ללוח'),
+    el('button', { class: 'btn sm', onclick: () => { closeDrawerGlobal(); openZmanimCheck(); } }, 'השוואה ללוח'),
     'מציג שש שבתות קדימה עם השקיעה האמיתית, כדי להשוות ללוח שלך'));
   g3.appendChild(setRow('נוסח זמני היום',
     mkSelect([['gra', 'גר״א (עדות המזרח)'], ['mga', 'מג״א'], ['both', 'שניהם']], S.zmanimNusach,
@@ -4774,9 +4774,9 @@ function renderSettings(){
       v => { S.rainWarnPct = Number(v); saveDB(); renderAll(true); }),
     'עבודה המסומנת כ"צילום חוץ" תקבל התרעה לפי התחזית'));
   gB.appendChild(setRow('מחירון ומקבצים',
-    el('button', { class: 'btn sm', onclick: () => { closeDrawer(); openPriceList(); } }, 'פתיחה')));
+    el('button', { class: 'btn sm', onclick: () => { closeDrawerGlobal(); openPriceList(); } }, 'פתיחה')));
   gB.appendChild(setRow('צוות — צלם שני ועוזרים',
-    el('button', { class: 'btn sm', onclick: () => { closeDrawer(); openCrew(); } }, 'פתיחה')));
+    el('button', { class: 'btn sm', onclick: () => { closeDrawerGlobal(); openCrew(); } }, 'פתיחה')));
   body.appendChild(gB);
 
   /* --- אחסון, גיבוי ו-PWA --- */
@@ -4822,7 +4822,7 @@ function renderSettings(){
     });
   }
   gS.appendChild(setRow('בדיקת תקינות נתונים',
-    el('button', { class: 'btn sm', onclick: () => { closeDrawer(); openIntegrity(); } }, 'סריקה'),
+    el('button', { class: 'btn sm', onclick: () => { closeDrawerGlobal(); openIntegrity(); } }, 'סריקה'),
     'מאתר פגישות כפולות, שיוכים שבורים, רשומות ריקות, אנשי קשר כפולים ועוד'));
   /* --- V4.5 --- */
   gS.appendChild(setRow('התראה על שינוי גדול בבת אחת',
@@ -4832,23 +4832,23 @@ function renderSettings(){
     mkSelect([[5, '5 רשומות'], [15, '15 רשומות'], [30, '30 רשומות'], [50, '50 רשומות']],
       S.bigChangeThreshold, v => { S.bigChangeThreshold = Number(v); saveDB(); })));
   gS.appendChild(setRow('ארכיון שנתי',
-    el('button', { class: 'btn sm', onclick: () => { closeDrawer(); openYearlyArchive(); } }, 'ניהול'),
+    el('button', { class: 'btn sm', onclick: () => { closeDrawerGlobal(); openYearlyArchive(); } }, 'ניהול'),
     'מעביר שנים ישנות לארכיון קריא-בלבד, כדי להקטין את קובץ הנתונים'));
   /* --- V4.1: סנכרון ברשת המקומית (בגרסת המחשב יש בלוק משלו) --- */
   if (!(typeof DESKTOP !== 'undefined' && DESKTOP)){
     const remotes = Sync.remotes();
     gS.appendChild(setRow('סנכרון עם מחשבים',
-      el('button', { class: 'btn sm', onclick: () => { closeDrawer(); openSyncSetup(); } },
+      el('button', { class: 'btn sm', onclick: () => { closeDrawerGlobal(); openSyncSetup(); } },
         remotes.length ? 'ניהול (' + remotes.length + ')' : 'הוספה'),
       remotes.length ? remotes.map(r => r.name || 'מחשב').join(' · ')
                      : 'הוסף מחשב לכל רשת קבועה — למשל בית וסטודיו'));
   } else {
     gS.appendChild(setRow('סנכרון ברשת המקומית (המחשב הזה)',
-      el('button', { class: 'btn sm', onclick: () => { closeDrawer(); openDesktopSyncPanel(); } }, 'פרטי חיבור ופיד יומן'),
+      el('button', { class: 'btn sm', onclick: () => { closeDrawerGlobal(); openDesktopSyncPanel(); } }, 'פרטי חיבור ופיד יומן'),
       'הכתובת, האסימון, ופיד יומן חי (webcal) לגוגל קלנדר / יומן אייפון'));
   }
   gS.appendChild(setRow('☁ סנכרון עננים (בזמן אמת, גם כשהמחשב כבוי)',
-    el('button', { class: 'btn sm', onclick: () => { closeDrawer(); openCloudSyncSetup(); } },
+    el('button', { class: 'btn sm', onclick: () => { closeDrawerGlobal(); openCloudSyncSetup(); } },
       CloudSync.cfg().enabled ? 'מחובר — ניהול' : 'הגדרה'),
     'מבוסס Firebase (חינמי) — כל המכשירים כותבים וקוראים ישירות מהענן, בלי תלות במחשב ספציפי שדלוק'));
   gS.appendChild(setRow('כל כמה זמן',
