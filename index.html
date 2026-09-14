@@ -1828,7 +1828,7 @@ body.sidenav-on .app-bar{ padding-inline-end: 222px; }
 
 <header class="app-bar no-print">
   <div class="brand">
-    <b id="brandName">מתכנן</b><span>V4.9.1 · יומי · שבועי · חודשי · שנתי</span>
+    <b id="brandName">מתכנן</b><span>V4.9.2 · יומי · שבועי · חודשי · שנתי</span>
   </div>
 
   <div class="tabs" role="tablist" id="tabs">
@@ -14142,11 +14142,23 @@ const Sync = {
 const CLOUD_CFG_KEY = 'planner_cloudcfg_v1';
 const CLOUD_BASE_KEY = 'planner_cloudbase_v1';
 /** קורא טקסט שהודבק מקונסולת Firebase (אובייקט JS, לא JSON תקני) ומחזיר אובייקט */
+/** מוצא את בלוק ה-{ } שמתחיל אחרי "firebaseConfig" ספציפית (לא כל { ראשון בטקסט —
+    שורת ה-import הרגילה של Firebase כוללת { } משל עצמה: import { initializeApp } ...),
+    עם ספירת עומק סוגריים אמיתית כדי למצוא את הסגירה המתאימה ולא סתם "ה-} האחרון". */
 function parseFirebaseConfigText(text){
   try {
     const s = String(text || '');
-    const body = s.slice(s.indexOf('{'), s.lastIndexOf('}') + 1);
-    if (!body || body.length < 2) return null;
+    const marker = s.indexOf('firebaseConfig');
+    let start = s.indexOf('{', marker >= 0 ? marker : 0);
+    if (start < 0) start = s.indexOf('{');
+    if (start < 0) return null;
+    let depth = 0, end = -1;
+    for (let i = start; i < s.length; i++){
+      if (s[i] === '{') depth++;
+      else if (s[i] === '}'){ depth--; if (depth === 0){ end = i; break; } }
+    }
+    if (end < 0) return null;
+    const body = s.slice(start, end + 1);
     const jsonish = body
       .replace(/([{,]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:/g, '$1"$2":')
       .replace(/'/g, '"')
