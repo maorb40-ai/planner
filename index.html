@@ -1828,7 +1828,7 @@ body.sidenav-on .app-bar{ padding-inline-end: 222px; }
 
 <header class="app-bar no-print">
   <div class="brand">
-    <b id="brandName">מתכנן</b><span>V4.9.9 · יומי · שבועי · חודשי · שנתי</span>
+    <b id="brandName">מתכנן</b><span>V4.9.10 · יומי · שבועי · חודשי · שנתי</span>
   </div>
 
   <div class="tabs" role="tablist" id="tabs">
@@ -14268,8 +14268,17 @@ const CloudSync = {
   },
 
   onRemoteChange(snap){
-    const incoming = snap.val();
-    if (!incoming){ this.push(); return; }                      // אין עדיין נתונים בענן — המכשיר הזה "מזרע" אותם, לא מחכה לשמירה הבאה
+    // הנתונים נשמרים כמחרוזת JSON יחידה (blob) ולא כאובייקט מקונן — כי
+    // Firebase Realtime Database לא משמר במדויק מבנה של אובייקטים/מערכים
+    // מקוננים (יכול להחזיר מערך כאובייקט אם יש בו "חורים", לא משמר סדר
+    // מפתחות וכו'), וזה גרם להשוואות מקומי-מול-עננים לא להתכנס לעולם —
+    // וללופ push/onRemoteChange אינסופי שתקע את האפליקציה. מחרוזת אחת
+    // אטומה נשמרת ונקראת בדיוק כמו שהיא, בלי "עיבוד" של פיירבייס.
+    const raw = snap.val();
+    const rawBlob = raw && typeof raw === 'object' ? raw.blob : null;
+    if (!rawBlob){ this.push(); return; }                        // אין עדיין נתונים בענן (או פורמט ישן) — המכשיר הזה "מזרע" אותם
+    let incoming;
+    try { incoming = JSON.parse(rawBlob); } catch(e){ this.push(); return; }
     const incomingJSON = canonicalJSON(incoming);
     if (incomingJSON === this.lastPushedJSON) return;           // זה מה שאני עצמי דחפתי לרגע — לא הד מעגלי
     const base = this.getBase();
@@ -14315,7 +14324,10 @@ const CloudSync = {
     if (json === this.lastPushedJSON) return;
     this.lastPushedJSON = json;
     this.setBase(clean);
-    try { this.fbRef.set(clean).catch(e => console.error('CloudSync push failed', e)); }
+    // נשמר כמחרוזת JSON יחידה (blob) — לא כאובייקט מקונן — כדי ש-Firebase
+    // לא "יעבד" את המבנה (סדר מפתחות, מערכים עם חורים וכד') ויגרום להשוואות
+    // עתידיות לא להתכנס. ראו הערה מפורטת ב-onRemoteChange.
+    try { this.fbRef.set({ blob: JSON.stringify(clean), at: Date.now() }).catch(e => console.error('CloudSync push failed', e)); }
     catch(e){ console.error('CloudSync push failed (sync)', e); }
   },
   pushDebounced(){
