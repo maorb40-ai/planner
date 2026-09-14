@@ -1838,7 +1838,7 @@ body.sidenav-on .app-bar{ padding-inline-end: 222px; }
 
 <header class="app-bar no-print">
   <div class="brand">
-    <b id="brandName">מתכנן</b><span>V4.9.13 · יומי · שבועי · חודשי · שנתי</span>
+    <b id="brandName">מתכנן</b><span>V4.9.14 · יומי · שבועי · חודשי · שנתי</span>
   </div>
 
   <div class="tabs" role="tablist" id="tabs">
@@ -2788,6 +2788,7 @@ function trashRestore(item){
     case 'todo':    (c.bucket === 'day' ? dayW(c.iso).todos : periodW(c.bucket, c.key).todos).push(d); break;
     case 'appt':    dayW(c.iso).appts.push(d); break;
     case 'contact': DB.contacts.push(d); invalidateContactCache(); break;
+    case 'contacts-bulk': DB.contacts = DB.contacts.concat(d); invalidateContactCache(); break;
     case 'job':     DB.jobs.push(d); break;
     case 'finance': DB.finance.push(d); break;
     case 'event':   DB.events.push(d); _evCache.key = null; break;
@@ -2800,7 +2801,8 @@ function trashRestore(item){
   return true;
 }
 const TRASH_LABELS = { todo: 'משימה', appt: 'פגישה', contact: 'איש קשר', job: 'עבודה',
-                       finance: 'תנועה כספית', event: 'אירוע', recurring: 'משימה קבועה', template: 'תבנית' };
+                       finance: 'תנועה כספית', event: 'אירוע', recurring: 'משימה קבועה', template: 'תבנית',
+                       'contacts-bulk': 'קבוצת אנשי קשר' };
 
 function openTrash(){
   const box = el('div', { style: 'display:flex;flex-direction:column;gap:7px' });
@@ -6519,6 +6521,16 @@ function openContacts(){
     el('button', { class: 'btn', onclick: exportContactsVCF }, '⬇ ייצוא vCard'),
     el('button', { class: 'btn', title: 'איתור אנשי קשר עם שם משובש מייבוא ישן ומחיקתם (לסל המחזור)',
       onclick: openGarbledContactsCleanup }, '🧹 ניקוי משובשים'),
+    el('button', { class: 'btn danger', title: 'מחיקת כל אנשי הקשר בבת אחת — לפני ייבוא מחדש מקובץ',
+      onclick: () => {
+      const n = DB.contacts.length;
+      if (!n){ toast('אין אנשי קשר למחוק'); return; }
+      const typed = prompt(`פעולה זו תמחק את כל ${n} אנשי הקשר. הקלד/י "מחק הכול" לאישור:`);
+      if (typed !== 'מחק הכול') return;
+      trashPush('contacts-bulk', `כל אנשי הקשר (${n})`, DB.contacts, {});
+      DB.contacts = []; invalidateContactCache(); saveDB(); closeModal(); renderAll(true);
+      toast(`${n} אנשי קשר נמחקו — אפשר לשחזר את כולם בבת אחת מסל המחזור`);
+    } }, '🗑 מחיקת הכול'),
     el('button', { class: 'btn', onclick: () => { closeModal(); renderAll(true); } }, 'סגירה')
   ]);
 }
