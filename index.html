@@ -1135,6 +1135,19 @@ body.focus-mode .banner-wrap, body.focus-mode .shabbat-ribbon{ display: none; }
 .focus-actions{ display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
 .focus-pick{ display: flex; flex-direction: column; gap: 6px; width: min(460px, 92vw); }
 
+/* ---------- שדה לקוח/איש-קשר עם חיפוש-בזמן-הקלדה ---------- */
+.contact-picker{ position: relative; display: inline-block; }
+.contact-picker input{ width: 100%; min-width: 130px; }
+.cp-menu{
+  position: absolute; z-index: 40; inset-inline-start: 0; top: calc(100% + 2px);
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); max-height: 230px; overflow-y: auto; min-width: 200px;
+}
+.cp-opt{ padding: 6px 10px; cursor: pointer; font-size: .9em; }
+.cp-opt:hover{ background: var(--sel); }
+.cp-opt.muted{ color: var(--ink-soft); font-style: italic; cursor: default; }
+.cp-opt.muted:hover{ background: none; }
+
 /* ---------- מסך "כל המשימות" ואג׳נדה ---------- */
 .filters{ display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
 .filters select, .filters input{ font-size: .86em; }
@@ -1838,7 +1851,7 @@ body.sidenav-on .app-bar{ padding-inline-end: 222px; }
 
 <header class="app-bar no-print">
   <div class="brand">
-    <b id="brandName">מתכנן</b><span>V4.9.15 · יומי · שבועי · חודשי · שנתי</span>
+    <b id="brandName">מתכנן</b><span>V4.9.16 · יומי · שבועי · חודשי · שנתי</span>
   </div>
 
   <div class="tabs" role="tablist" id="tabs">
@@ -7803,18 +7816,45 @@ const contactById = id => DB.contacts.find(c => c.id === id) || null;
 const contactName = id => (contactById(id) || {}).name || '';
 
 /** בורר איש קשר לשדות "לקוח" */
+// שדה לקוח/איש-קשר עם חיפוש-בזמן-הקלדה — לא <select> עם כל 1900+ אנשי הקשר
+// שצריך לגלול בו כדי למצוא מישהו. משמש בכל מקום שיש שדה "לקוח" (עבודה,
+// משימה, פגישה, מסמך, רישום שעות וכו') — תיקון אחד כאן מתקן את כולם.
 function contactPicker(getId, setId, placeholder){
-  const s = el('select');
-  const fill = () => {
-    s.innerHTML = '';
-    s.appendChild(el('option', { value: '', text: placeholder || 'ללא לקוח' }));
-    DB.contacts.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', 'he'))
-      .forEach(c => s.appendChild(el('option', { value: c.id, text: c.name || '(ללא שם)' })));
-    s.value = getId() || '';
+  const wrap = el('div', { class: 'contact-picker' });
+  const inp = el('input', { type: 'text', placeholder: placeholder || 'ללא לקוח — הקלדה לחיפוש…', autocomplete: 'off' });
+  const menu = el('div', { class: 'cp-menu' });
+  menu.hidden = true;
+  const nameOf = id => { const c = DB.contacts.find(x => x.id === id); return c ? (c.name || '(ללא שם)') : ''; };
+  let selectedId = getId() || '';
+  inp.value = nameOf(selectedId);
+  const commit = id => {
+    selectedId = id || '';
+    inp.value = nameOf(selectedId);
+    setId(selectedId); saveDB();
+    menu.hidden = true;
   };
-  fill();
-  s.addEventListener('change', () => { setId(s.value); saveDB(); });
-  return s;
+  const renderMenu = () => {
+    const q = inp.value.trim().toLowerCase();
+    menu.innerHTML = '';
+    const matches = q
+      ? DB.contacts.filter(c => (c.name || '').toLowerCase().includes(q) ||
+          (c.phone || '').includes(q) || (c.org || '').toLowerCase().includes(q)).slice(0, 30)
+      : DB.contacts.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', 'he')).slice(0, 20);
+    if (selectedId) menu.appendChild(el('div', { class: 'cp-opt', onclick: () => commit('') }, '✕ ללא לקוח'));
+    if (!matches.length) menu.appendChild(el('div', { class: 'cp-opt muted' }, q ? 'לא נמצאו התאמות' : 'הקלד לחיפוש'));
+    matches.forEach(c => menu.appendChild(el('div', { class: 'cp-opt',
+      text: c.name || '(ללא שם)', onclick: () => commit(c.id) })));
+    menu.hidden = false;
+  };
+  inp.addEventListener('input', renderMenu);
+  inp.addEventListener('focus', () => { inp.select(); renderMenu(); });
+  inp.addEventListener('blur', () => setTimeout(() => {
+    menu.hidden = true;
+    inp.value = nameOf(selectedId);
+  }, 150));
+  wrap.appendChild(inp); wrap.appendChild(menu);
+  Object.defineProperty(wrap, 'value', { get(){ return selectedId; }, set(v){ commit(v); } });
+  return wrap;
 }
 
 /* --------------------------- כרטיס לקוח --------------------------- */
