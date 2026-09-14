@@ -1838,7 +1838,7 @@ body.sidenav-on .app-bar{ padding-inline-end: 222px; }
 
 <header class="app-bar no-print">
   <div class="brand">
-    <b id="brandName">מתכנן</b><span>V4.9.11 · יומי · שבועי · חודשי · שנתי</span>
+    <b id="brandName">מתכנן</b><span>V4.9.12 · יומי · שבועי · חודשי · שנתי</span>
   </div>
 
   <div class="tabs" role="tablist" id="tabs">
@@ -6568,7 +6568,12 @@ function decodeQP(s, charset){
 function parseVCF(text){
   const out = [];
   unfoldLines(text).split(/BEGIN:VCARD/i).slice(1).forEach(block => {
-    const body = block.split(/END:VCARD/i)[0];
+    // vCard 2.1 (כמו זה שגלקסי מייצא) עוטף שדות QUOTED-PRINTABLE ארוכים על פני
+    // כמה שורות פיזיות, ומסמן את זה ב-"=" בודד בסוף השורה (בלי רווח בתחילת
+    // השורה הבאה, כך ש-unfoldLines לא תופס את זה). בלי לאחות את השורות האלה
+    // לפני הפענוח, כל שם עברי ארוך נחתך באמצע בית של UTF-8 ומופיע כג'יבריש
+    // עם "=" תלוי בסוף — בדיוק התופעה שדיווח עליה מתי.
+    const body = block.split(/END:VCARD/i)[0].replace(/=\r?\n/g, '');
     const c = { id: uid(), name: '', phone: '', email: '', org: '', note: '', tags: [], bday: null };
     body.split(/\r?\n/).forEach(line => {
       const m = line.match(/^([A-Za-z0-9\-.]+)((?:;[^:]*)*):(.*)$/);
