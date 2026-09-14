@@ -1828,7 +1828,7 @@ body.sidenav-on .app-bar{ padding-inline-end: 222px; }
 
 <header class="app-bar no-print">
   <div class="brand">
-    <b id="brandName">מתכנן</b><span>V4.8.1 · יומי · שבועי · חודשי · שנתי</span>
+    <b id="brandName">מתכנן</b><span>V4.9 · יומי · שבועי · חודשי · שנתי</span>
   </div>
 
   <div class="tabs" role="tablist" id="tabs">
@@ -2588,6 +2588,7 @@ const saveDB = debounce(() => {
   _prevState = cur;
   if (typeof Lock !== 'undefined' && Lock.key) persistEncrypted(); else persistNow();
   maybeAutoBackup();
+  try { CloudSync.pushDebounced(); } catch(e){}
 }, 350);
 
 /* ------------------------ ביטול וביצוע חוזר ------------------------ */
@@ -4846,6 +4847,10 @@ function renderSettings(){
       el('button', { class: 'btn sm', onclick: () => { closeDrawer(); openDesktopSyncPanel(); } }, 'פרטי חיבור ופיד יומן'),
       'הכתובת, האסימון, ופיד יומן חי (webcal) לגוגל קלנדר / יומן אייפון'));
   }
+  gS.appendChild(setRow('☁ סנכרון עננים (בזמן אמת, גם כשהמחשב כבוי)',
+    el('button', { class: 'btn sm', onclick: () => { closeDrawer(); openCloudSyncSetup(); } },
+      CloudSync.cfg().enabled ? 'מחובר — ניהול' : 'הגדרה'),
+    'מבוסס Firebase (חינמי) — כל המכשירים כותבים וקוראים ישירות מהענן, בלי תלות במחשב ספציפי שדלוק'));
   gS.appendChild(setRow('כל כמה זמן',
     mkSelect([[3, '3 שעות'], [6, '6 שעות'], [12, '12 שעות'], [24, 'יממה']], S.backupEveryHours,
       v => { S.backupEveryHours = Number(v); saveDB(); })));
@@ -14125,6 +14130,111 @@ const Sync = {
   }
 };
 
+/* ==========================================================================
+   34. סנכרון עננים (Firebase Realtime Database) — בזמן אמת, בלי תלות במחשב
+   --------------------------------------------------------------------------
+   בניגוד לסנכרון ברשת המקומית (Sync) שדורש שהמחשב יהיה דלוק ושכל המכשירים
+   יהיו באותה רשת (אפילו אם באמצעות Tailscale) — כאן כל מכשיר כותב וקורא
+   ישירות מול מסד נתונים בענן (שכבה חינמית של גוגל). ברגע שמכשיר אחד שומר,
+   כל שאר המכשירים המחוברים מקבלים את השינוי כמעט מיידית, גם אם אף מחשב
+   "בבית" לא פועל כרגע. שימוש חדר-יחיד (Sync.mergeDB) לפתרון התנגשויות,
+   בדיוק כמו בסנכרון המקומי — כדי שההתנהגות תהיה עקבית ומוכרת. */
+const CLOUD_CFG_KEY = 'planner_cloudcfg_v1';
+const CLOUD_BASE_KEY = 'planner_cloudbase_v1';
+/** קורא טקסט שהודבק מקונסולת Firebase (אובייקט JS, לא JSON תקני) ומחזיר אובייקט */
+function parseFirebaseConfigText(text){
+  try {
+    const s = String(text || '');
+    const body = s.slice(s.indexOf('{'), s.lastIndexOf('}') + 1);
+    if (!body || body.length < 2) return null;
+    const jsonish = body
+      .replace(/([{,]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:/g, '$1"$2":')
+      .replace(/'/g, '"')
+      .replace(/,(\s*[}\]])/g, '$1');
+    const obj = JSON.parse(jsonish);
+    return (obj && obj.apiKey && obj.databaseURL) ? obj : null;
+  } catch(e){ return null; }
+}
+const CloudSync = {
+  fbApp: null, fbRef: null, listening: false, lastPushedJSON: null, _t: null,
+
+  cfg(){ try { return JSON.parse(localStorage.getItem(CLOUD_CFG_KEY) || 'null') || {}; } catch(e){ return {}; } },
+  setCfg(patch){
+    const c = Object.assign(this.cfg(), patch);
+    try { localStorage.setItem(CLOUD_CFG_KEY, JSON.stringify(c)); } catch(e){}
+    return c;
+  },
+  getBase(){ try { return JSON.parse(localStorage.getItem(CLOUD_BASE_KEY) || 'null'); } catch(e){ return null; } },
+  setBase(db){ try { localStorage.setItem(CLOUD_BASE_KEY, JSON.stringify(db)); } catch(e){} },
+  newSyncId(){ return Array.from(crypto.getRandomValues(new Uint8Array(12))).map(b => b.toString(16).padStart(2, '0')).join(''); },
+
+  loadSDK(){
+    if (window.firebase && firebase.database) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const s1 = document.createElement('script');
+      s1.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js';
+      s1.onload = () => {
+        const s2 = document.createElement('script');
+        s2.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js';
+        s2.onload = resolve; s2.onerror = () => reject(new Error('טעינת Firebase נכשלה'));
+        document.head.appendChild(s2);
+      };
+      s1.onerror = () => reject(new Error('טעינת Firebase נכשלה'));
+      document.head.appendChild(s1);
+    });
+  },
+
+  async start(){
+    const c = this.cfg();
+    if (!c.enabled || !c.apiKey || !c.databaseURL || !c.syncId) return;
+    if (this.listening) return;
+    try {
+      await this.loadSDK();
+      this.fbApp = firebase.apps && firebase.apps.length ? firebase.app()
+        : firebase.initializeApp({ apiKey: c.apiKey, databaseURL: c.databaseURL, projectId: c.projectId || undefined });
+      this.fbRef = firebase.database().ref('planners/' + c.syncId);
+      this.listening = true;
+      this.fbRef.on('value', snap => this.onRemoteChange(snap), err => {
+        console.error('CloudSync', err); toast('סנכרון עננים: שגיאת הרשאה — בדוק את חוקי ה-Rules');
+      });
+    } catch(e){ console.error('CloudSync start failed', e); toast('סנכרון עננים לא הצליח להתחבר'); }
+  },
+  stop(){
+    if (this.fbRef) try { this.fbRef.off(); } catch(e){}
+    this.listening = false; this.fbRef = null;
+  },
+
+  onRemoteChange(snap){
+    const incoming = snap.val();
+    if (!incoming) return;                                     // אין עדיין נתונים בענן — יישלחו בפעם הראשונה שנשמור
+    const incomingJSON = JSON.stringify(incoming);
+    if (incomingJSON === this.lastPushedJSON) return;           // זה מה שאני עצמי דחפתי לרגע — לא הד מעגלי
+    const base = this.getBase();
+    const { db: merged, conflicts } = Sync.mergeDB(DB, incoming, base, 'cloud');
+    Object.keys(DB).forEach(k => delete DB[k]);
+    Object.assign(DB, merged);
+    this.setBase(JSON.parse(JSON.stringify(merged)));
+    persistNow();
+    invalidateContactCache(); invalidatePlacesCache(); _evCache.key = null;
+    applyTheme(); renderAll(true);
+    if (conflicts.length) toast(`עודכן מהעננים (${conflicts.length} שינויים משולבים)`);
+  },
+
+  push(){
+    if (!this.listening || !this.fbRef) return;
+    const json = JSON.stringify(DB);
+    if (json === this.lastPushedJSON) return;
+    this.lastPushedJSON = json;
+    this.setBase(JSON.parse(json));
+    this.fbRef.set(DB).catch(e => console.error('CloudSync push failed', e));
+  },
+  pushDebounced(){
+    if (!this.listening) return;
+    clearTimeout(this._t);
+    this._t = setTimeout(() => this.push(), 800);
+  }
+};
+
 /* ---------------- מסך ההגדרה ---------------- */
 /** מסך הניהול — רשימת המחשבים המוכרים. תומך במספר בלתי מוגבל (בית, סטודיו, ...) */
 /** מסך "המחשב הזה" בגרסת שולחן העבודה — כתובת/אסימון להוספה בטלפון,
@@ -14177,6 +14287,54 @@ async function openDesktopSyncPanel(){
       await window.plannerDesktop.syncNewToken(); openDesktopSyncPanel();
     } }, '🔑 יצירת אסימון חדש'));
   }
+}
+
+/** מסך הגדרת סנכרון עננים (Firebase) — מדביקים את קטע ה-config מקונסולת
+    Firebase, מקבלים קוד סנכרון אישי (להזין באותו אופן בכל מכשיר), ומחברים. */
+function openCloudSyncSetup(){
+  const c = CloudSync.cfg();
+  const body = el('div', { style: 'display:flex;flex-direction:column;gap:12px' });
+  body.appendChild(el('div', { class: 'hint',
+    text: 'בפעם הראשונה: כנס ל-console.firebase.google.com, צור פרויקט חינמי, הפעל בו Realtime Database, ' +
+          'והדבק כאן את קטע ה-firebaseConfig שהוא נותן לך (מ- Project settings ← Your apps ← </>).' }));
+  const cfgArea = el('textarea', { class: 'area', style: 'min-height:110px;direction:ltr;text-align:left;font-family:monospace',
+    placeholder: 'const firebaseConfig = {\n  apiKey: "...",\n  databaseURL: "https://...firebasedatabase.app",\n  ...\n};' });
+  cfgArea.value = (c.apiKey || c.databaseURL) ? JSON.stringify({ apiKey: c.apiKey, databaseURL: c.databaseURL, projectId: c.projectId }, null, 1) : '';
+  body.appendChild(field('הדבקת קטע ה-firebaseConfig', cfgArea));
+
+  const syncIdInp = el('input', { class: 'line-input ltr-num', value: c.syncId || '', placeholder: 'לא נבחר עדיין' });
+  const syncIdRow = el('div', { class: 'row' }, [
+    syncIdInp,
+    el('button', { class: 'btn sm', title: 'יצירת קוד סנכרון אישי חדש', onclick: () => { syncIdInp.value = CloudSync.newSyncId(); } }, '🎲 יצירה'),
+    el('button', { class: 'btn sm', title: 'העתקה — צריך להזין את אותו הקוד בכל מכשיר', onclick: () => {
+      navigator.clipboard.writeText(syncIdInp.value); toast('הקוד הועתק');
+    } }, '📋')
+  ]);
+  body.appendChild(field('קוד סנכרון אישי (זהה בכל המכשירים)', syncIdRow));
+  body.appendChild(el('div', { class: 'hint',
+    text: 'קוד הסנכרון הוא כמו סיסמה קלה — כל מי שיודע אותו יכול לקרוא ולכתוב לנתונים האלה. אל תשתף אותו חוץ מהמכשירים שלך.' }));
+
+  const status = el('div', { class: 'hint',
+    text: c.enabled ? (CloudSync.listening ? '✅ מחובר ופעיל' : '⏳ מוגדר, מתחבר…') : '⭘ לא מופעל' });
+  body.appendChild(status);
+
+  openModal('סנכרון עננים (Firebase)', body, [
+    el('button', { class: 'btn primary', onclick: async () => {
+      const parsed = parseFirebaseConfigText(cfgArea.value);
+      if (!parsed) return toast('לא הצלחתי לקרוא את ה-config — בדוק שהדבקת את כל הקטע כולל הסוגריים');
+      if (!syncIdInp.value.trim()){ syncIdInp.value = CloudSync.newSyncId(); }
+      CloudSync.stop();
+      CloudSync.setCfg({ enabled: true, apiKey: parsed.apiKey, databaseURL: parsed.databaseURL,
+        projectId: parsed.projectId || '', syncId: syncIdInp.value.trim() });
+      toast('מתחבר…');
+      await CloudSync.start();
+      openCloudSyncSetup();
+    } }, '🔌 שמירה והפעלה'),
+    c.enabled ? el('button', { class: 'btn', onclick: () => {
+      CloudSync.stop(); CloudSync.setCfg({ enabled: false }); toast('סנכרון עננים כובה'); openCloudSyncSetup();
+    } }, 'כיבוי') : null,
+    el('button', { class: 'btn', onclick: closeModal }, 'סגירה')
+  ]);
 }
 
 function openSyncSetup(httpsWarning){
@@ -15771,6 +15929,7 @@ async function bootAfterUnlock(){
   setInterval(updateNowLines, 60000);
   loadWeather().then(m => { if (m) renderAll(true); });
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) setupSWUpdates();
+  CloudSync.start();
 }
 
 /** בדיקת עדכון גרסה — כולל כפתור רענון גלוי (חשוב במיוחד ב-PWA מותקן, שאין
