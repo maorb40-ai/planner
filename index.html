@@ -1828,7 +1828,7 @@ body.sidenav-on .app-bar{ padding-inline-end: 222px; }
 
 <header class="app-bar no-print">
   <div class="brand">
-    <b id="brandName">מתכנן</b><span>V4.9.5 · יומי · שבועי · חודשי · שנתי</span>
+    <b id="brandName">מתכנן</b><span>V4.9.6 · יומי · שבועי · חודשי · שנתי</span>
   </div>
 
   <div class="tabs" role="tablist" id="tabs">
@@ -14259,11 +14259,18 @@ const CloudSync = {
 
   push(){
     if (!this.listening || !this.fbRef) return;
-    const json = JSON.stringify(DB);
+    // Firebase דוחה (בזריקה מיידית, לא רק דחיית Promise) כל אובייקט שמכיל
+    // undefined באיזשהו שדה, בכל עומק. DB עצמו לפעמים כן מכיל undefined
+    // (שדה שלא אותחל). מעבר דרך JSON מנקה את זה — JSON.stringify משמיט
+    // מפתחות עם undefined לגמרי, ולכן ה-JSON.parse בחזרה נקי מהם.
+    let clean;
+    try { clean = JSON.parse(JSON.stringify(DB)); } catch(e){ return; }
+    const json = JSON.stringify(clean);
     if (json === this.lastPushedJSON) return;
     this.lastPushedJSON = json;
-    this.setBase(JSON.parse(json));
-    this.fbRef.set(DB).catch(e => console.error('CloudSync push failed', e));
+    this.setBase(clean);
+    try { this.fbRef.set(clean).catch(e => console.error('CloudSync push failed', e)); }
+    catch(e){ console.error('CloudSync push failed (sync)', e); }
   },
   pushDebounced(){
     if (!this.listening) return;
