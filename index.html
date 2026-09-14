@@ -1828,7 +1828,7 @@ body.sidenav-on .app-bar{ padding-inline-end: 222px; }
 
 <header class="app-bar no-print">
   <div class="brand">
-    <b id="brandName">מתכנן</b><span>V4.9.3 · יומי · שבועי · חודשי · שנתי</span>
+    <b id="brandName">מתכנן</b><span>V4.9.4 · יומי · שבועי · חודשי · שנתי</span>
   </div>
 
   <div class="tabs" role="tablist" id="tabs">
@@ -14141,6 +14141,16 @@ const Sync = {
    בדיוק כמו בסנכרון המקומי — כדי שההתנהגות תהיה עקבית ומוכרת. */
 const CLOUD_CFG_KEY = 'planner_cloudcfg_v1';
 const CLOUD_BASE_KEY = 'planner_cloudbase_v1';
+/** ברירת מחדל מוטמעת — כדי שכל עותק (וובי/מחשב/טאבלט) יתחבר לבד בלי להדביק
+    כלום בכל מכשיר בנפרד. apiKey/databaseURL של Firebase אינם סוד — ההגנה
+    האמיתית היא קוד הסנכרון (syncId) בחוקי ה-Rules, בדיוק כמו אסימון. */
+const CLOUD_DEFAULT_CONFIG = {
+  apiKey: 'AIzaSyBDcbb-MMOfU37ZFucRW5Kt_92BB40gDpc',
+  authDomain: 'mati-planner.firebaseapp.com',
+  databaseURL: 'https://mati-planner-default-rtdb.firebaseio.com',
+  projectId: 'mati-planner'
+};
+const CLOUD_DEFAULT_SYNC_ID = 'matib40';
 /** קורא טקסט שהודבק מקונסולת Firebase (אובייקט JS, לא JSON תקני) ומחזיר אובייקט */
 /** מוצא את בלוק ה-{ } שמתחיל אחרי "firebaseConfig" ספציפית (לא כל { ראשון בטקסט —
     שורת ה-import הרגילה של Firebase כוללת { } משל עצמה: import { initializeApp } ...),
@@ -14170,7 +14180,17 @@ function parseFirebaseConfigText(text){
 const CloudSync = {
   fbApp: null, fbRef: null, listening: false, lastPushedJSON: null, _t: null,
 
-  cfg(){ try { return JSON.parse(localStorage.getItem(CLOUD_CFG_KEY) || 'null') || {}; } catch(e){ return {}; } },
+  cfg(){
+    let stored = {};
+    try { stored = JSON.parse(localStorage.getItem(CLOUD_CFG_KEY) || 'null') || {}; } catch(e){ stored = {}; }
+    // ברירת מחדל מוטמעת: אם המשתמש לא כיבה במפורש (enabled === false) ואין config
+    // מקומי משלו, מתחברים עם הפרטים המוטמעים — בלי הדבקה בכל מכשיר
+    if (stored.enabled === false) return stored;
+    if (!stored.apiKey && !stored.databaseURL){
+      return Object.assign({ enabled: true, syncId: CLOUD_DEFAULT_SYNC_ID }, CLOUD_DEFAULT_CONFIG, stored);
+    }
+    return Object.assign({ enabled: true }, stored);
+  },
   setCfg(patch){
     const c = Object.assign(this.cfg(), patch);
     try { localStorage.setItem(CLOUD_CFG_KEY, JSON.stringify(c)); } catch(e){}
