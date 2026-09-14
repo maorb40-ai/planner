@@ -1828,7 +1828,7 @@ body.sidenav-on .app-bar{ padding-inline-end: 222px; }
 
 <header class="app-bar no-print">
   <div class="brand">
-    <b id="brandName">מתכנן</b><span>V4.9.7 · יומי · שבועי · חודשי · שנתי</span>
+    <b id="brandName">מתכנן</b><span>V4.9.8 · יומי · שבועי · חודשי · שנתי</span>
   </div>
 
   <div class="tabs" role="tablist" id="tabs">
@@ -14260,7 +14260,10 @@ const CloudSync = {
     const incomingJSON = JSON.stringify(incoming);
     if (incomingJSON === this.lastPushedJSON) return;           // זה מה שאני עצמי דחפתי לרגע — לא הד מעגלי
     const base = this.getBase();
-    const { db: merged, conflicts } = Sync.mergeDB(DB, incoming, base, 'cloud');
+    let { db: merged, conflicts } = Sync.mergeDB(DB, incoming, base, 'cloud');
+    // המיזוג יכול להחזיר מבנה עם שדות חסרים (מכשיר אחר בגרסה ישנה יותר, וכד') —
+    // בלי זה כל מסך שמסתמך על שדה חסר (למשל settings.catFilter) קורס ותוקע את האפליקציה
+    merged = deepDefaults(merged, DEFAULTS);
     Object.keys(DB).forEach(k => delete DB[k]);
     Object.assign(DB, merged);
     this.setBase(JSON.parse(JSON.stringify(merged)));
