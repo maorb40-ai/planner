@@ -1828,7 +1828,7 @@ body.sidenav-on .app-bar{ padding-inline-end: 222px; }
 
 <header class="app-bar no-print">
   <div class="brand">
-    <b id="brandName">מתכנן</b><span>V4.9.8 · יומי · שבועי · חודשי · שנתי</span>
+    <b id="brandName">מתכנן</b><span>V4.9.9 · יומי · שבועי · חודשי · שנתי</span>
   </div>
 
   <div class="tabs" role="tablist" id="tabs">
@@ -14195,8 +14195,21 @@ function parseFirebaseConfigText(text){
     return (obj && obj.apiKey && obj.databaseURL) ? obj : null;
   } catch(e){ return null; }
 }
+// JSON.stringify רגיל תלוי בסדר המפתחות, ו-Firebase Realtime Database לא
+// משמר את סדר המפתחות המקורי (הוא ממיין אותם בעצמו) — כך שהשוואת JSON.stringify
+// גולמי בין הנתונים המקומיים לנתונים שחוזרים מהעננים כושלת כל הזמן גם כשהתוכן
+// זהה, וזה גרם ל-push/onRemoteChange להיכנס ללופ אינסופי שתקע את כל האפליקציה.
+// השוואה תקנית (מפתחות ממוינים בכל עומק) פותרת את זה.
+function canonicalJSON(obj){
+  if (Array.isArray(obj)) return '[' + obj.map(canonicalJSON).join(',') + ']';
+  if (obj && typeof obj === 'object'){
+    return '{' + Object.keys(obj).sort().map(k => JSON.stringify(k) + ':' + canonicalJSON(obj[k])).join(',') + '}';
+  }
+  return JSON.stringify(obj);
+}
 const CloudSync = {
   fbApp: null, fbRef: null, listening: false, lastPushedJSON: null, _t: null,
+  _pushBurst: 0, _pushBurstAt: 0,
 
   cfg(){
     let stored = {};
@@ -14257,7 +14270,7 @@ const CloudSync = {
   onRemoteChange(snap){
     const incoming = snap.val();
     if (!incoming){ this.push(); return; }                      // אין עדיין נתונים בענן — המכשיר הזה "מזרע" אותם, לא מחכה לשמירה הבאה
-    const incomingJSON = JSON.stringify(incoming);
+    const incomingJSON = canonicalJSON(incoming);
     if (incomingJSON === this.lastPushedJSON) return;           // זה מה שאני עצמי דחפתי לרגע — לא הד מעגלי
     const base = this.getBase();
     let { db: merged, conflicts } = Sync.mergeDB(DB, incoming, base, 'cloud');
@@ -14275,7 +14288,19 @@ const CloudSync = {
     // לפני שהחיבור לענן עלה, או לפני שהמכשיר הזה התחבר בפעם הראשונה) — התוצאה
     // המשולבת עשירה יותר מהמצב בענן. בלי לשלוח אותה בחזרה, הנתונים האלה
     // נשארים "תקועים" מקומית לנצח ולעולם לא מגיעים למכשירים האחרים.
-    if (JSON.stringify(merged) !== incomingJSON) this.push();
+    if (canonicalJSON(merged) !== incomingJSON){
+      // מעצור ביטחון: אם משהו עדיין גורם ל-push/onRemoteChange להדהד זה את זה
+      // (למשל מקרה קצה שההשוואה הקנונית לא תפסה), עוצרים אחרי כמה ניסיונות
+      // ברצף במקום לקרוס ב"too much recursion" ולתקוע את כל האפליקציה.
+      const now = Date.now();
+      if (now - this._pushBurstAt > 5000){ this._pushBurst = 0; this._pushBurstAt = now; }
+      this._pushBurst++;
+      // setTimeout ולא קריאה ישירה: פיירבייס יכול להדהד כתיבה מקומית באופן
+      // סינכרוני-לגמרי, וקריאה ישירה הייתה בונה שרשרת קריאות מקוננת (recursion)
+      // עד קריסה. ה-setTimeout שובר את השרשרת הזו לקריאה נפרדת ב-event loop.
+      if (this._pushBurst <= 3) setTimeout(() => this.push(), 0);
+      else console.error('CloudSync: circuit breaker — too many auto-pushes in a row, stopped to avoid a freeze');
+    }
   },
 
   push(){
@@ -14286,7 +14311,7 @@ const CloudSync = {
     // מפתחות עם undefined לגמרי, ולכן ה-JSON.parse בחזרה נקי מהם.
     let clean;
     try { clean = JSON.parse(JSON.stringify(DB)); } catch(e){ return; }
-    const json = JSON.stringify(clean);
+    const json = canonicalJSON(clean);
     if (json === this.lastPushedJSON) return;
     this.lastPushedJSON = json;
     this.setBase(clean);
