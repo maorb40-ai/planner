@@ -1838,7 +1838,7 @@ body.sidenav-on .app-bar{ padding-inline-end: 222px; }
 
 <header class="app-bar no-print">
   <div class="brand">
-    <b id="brandName">מתכנן</b><span>V4.9.12 · יומי · שבועי · חודשי · שנתי</span>
+    <b id="brandName">מתכנן</b><span>V4.9.13 · יומי · שבועי · חודשי · שנתי</span>
   </div>
 
   <div class="tabs" role="tablist" id="tabs">
@@ -6460,6 +6460,41 @@ function contactRow(c, onChange, compact){
   ]);
 }
 
+// מאתר שם שנחתך/השתבש בייבוא vCard 2.1 ישן (לפני התיקון באיחוד שורות QP) —
+// נשאר בו תו replacement, "=" תלוי בסוף, או קוד QP גולמי שלא פוענח
+function looksGarbledName(name){
+  if (!name) return false;
+  if (/�/.test(name)) return true;
+  if (/=\s*$/.test(name.trim())) return true;
+  if (/=[0-9A-Fa-f]{2}/.test(name)) return true;
+  return false;
+}
+function openGarbledContactsCleanup(){
+  const bad = DB.contacts.filter(c => looksGarbledName(c.name));
+  if (!bad.length){ toast('לא נמצאו שמות משובשים'); return; }
+  const list = el('div', { class: 'contact-list' },
+    bad.slice(0, 200).map(c => el('div', { class: 'contact-row' }, [
+      el('div', { class: 'who' }, [ el('b', { text: c.name || '(ללא שם)' }),
+        el('span', { text: c.phone || c.email || '' }) ])
+    ])));
+  openModal('ניקוי שמות משובשים', [
+    el('div', { class: 'hint',
+      text: `נמצאו ${bad.length} אנשי קשר עם שם משובש (מתוך ${DB.contacts.length} בסך הכול). ` +
+            'המחיקה עוברת לסל המחזור — אפשר לשחזר משם אם בטעות נמחק מישהו שלא היה צריך.' }),
+    bad.length > 200 ? el('div', { class: 'hint', text: 'מוצגים 200 הראשונים.' }) : null,
+    list
+  ], [
+    el('button', { class: 'btn primary danger', onclick: () => {
+      if (!confirm(`למחוק ${bad.length} אנשי קשר עם שם משובש? הפעולה הפיכה מסל המחזור.`)) return;
+      const badSet = new Set(bad);
+      bad.forEach(c => trashPush('contact', c.name, c, {}));
+      DB.contacts = DB.contacts.filter(x => !badSet.has(x));
+      invalidateContactCache(); saveDB(); closeModal(); renderAll(true);
+      toast(`${bad.length} אנשי קשר משובשים הועברו לסל המחזור`);
+    } }, `🗑 מחיקת ${bad.length} משובשים`),
+    el('button', { class: 'btn', onclick: closeModal }, 'סגירה')
+  ]);
+}
 function openContacts(){
   const search = el('input', { class: 'contact-search', type: 'text', placeholder: 'חיפוש לפי שם, טלפון, דוא״ל או תגית…' });
   const list = el('div', { class: 'contact-list' });
@@ -6482,6 +6517,8 @@ function openContacts(){
     } }, '＋ איש קשר'),
     el('button', { class: 'btn', onclick: importContactsFile }, '⬆ ייבוא מקובץ'),
     el('button', { class: 'btn', onclick: exportContactsVCF }, '⬇ ייצוא vCard'),
+    el('button', { class: 'btn', title: 'איתור אנשי קשר עם שם משובש מייבוא ישן ומחיקתם (לסל המחזור)',
+      onclick: openGarbledContactsCleanup }, '🧹 ניקוי משובשים'),
     el('button', { class: 'btn', onclick: () => { closeModal(); renderAll(true); } }, 'סגירה')
   ]);
 }
