@@ -1828,7 +1828,7 @@ body.sidenav-on .app-bar{ padding-inline-end: 222px; }
 
 <header class="app-bar no-print">
   <div class="brand">
-    <b id="brandName">מתכנן</b><span>V4.9.2 · יומי · שבועי · חודשי · שנתי</span>
+    <b id="brandName">מתכנן</b><span>V4.9.3 · יומי · שבועי · חודשי · שנתי</span>
   </div>
 
   <div class="tabs" role="tablist" id="tabs">
@@ -14218,7 +14218,7 @@ const CloudSync = {
 
   onRemoteChange(snap){
     const incoming = snap.val();
-    if (!incoming) return;                                     // אין עדיין נתונים בענן — יישלחו בפעם הראשונה שנשמור
+    if (!incoming){ this.push(); return; }                      // אין עדיין נתונים בענן — המכשיר הזה "מזרע" אותם, לא מחכה לשמירה הבאה
     const incomingJSON = JSON.stringify(incoming);
     if (incomingJSON === this.lastPushedJSON) return;           // זה מה שאני עצמי דחפתי לרגע — לא הד מעגלי
     const base = this.getBase();
