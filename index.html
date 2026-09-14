@@ -1828,7 +1828,7 @@ body.sidenav-on .app-bar{ padding-inline-end: 222px; }
 
 <header class="app-bar no-print">
   <div class="brand">
-    <b id="brandName">מתכנן</b><span>V4.9.6 · יומי · שבועי · חודשי · שנתי</span>
+    <b id="brandName">מתכנן</b><span>V4.9.7 · יומי · שבועי · חודשי · שנתי</span>
   </div>
 
   <div class="tabs" role="tablist" id="tabs">
@@ -2482,6 +2482,19 @@ function loadDB(){
   if (!DB.settings.docCounters) DB.settings.docCounters = { quote: 1, contract: 1, invoice: 1, receipt: 1 };
   if (!DB.settings.layout || typeof DB.settings.layout !== 'object') DB.settings.layout = {};
   if (!DB.importLog || typeof DB.importLog !== 'object') DB.importLog = {};
+  if (!Array.isArray(DB.settings.catFilter)) DB.settings.catFilter = [];
+  // מיגרציה: מפתחות ישנים ברישום היבוא שנוצרו לפני sanitizeFbKey עלולים להכיל
+  // תווים אסורים בפיירבייס ("." בעיקר) ולהפיל כל שמירה לעננים.
+  (() => {
+    let changed = false;
+    const clean = {};
+    for (const k in DB.importLog){
+      const sk = sanitizeFbKey(k);
+      clean[sk] = DB.importLog[k];
+      if (sk !== k) changed = true;
+    }
+    if (changed) DB.importLog = clean;
+  })();
   for (const rec of Object.values(DB.days)){
     (rec.todos || []).forEach(t => {
       if (!t) return;
@@ -7067,7 +7080,12 @@ function openTimeShift(){
 /** מזהה יציב למופע של אירוע — הבסיס לייבוא מצטבר */
 function occKey(ev, iso){
   const base = ev.uid || ('n:' + ev.what + '@' + ev.time);
-  return base + '|' + iso;
+  return sanitizeFbKey(base + '|' + iso);
+}
+// פיירבייס אוסר על ".", "#", "$", "/", "[", "]" במפתחות — מזהי אירועים מיומן גוגל
+// מכילים לרוב "." (למשל בכתובת אימייל), ולכן צריך להחליף לפני שמירה כמפתח.
+function sanitizeFbKey(key){
+  return String(key).replace(/[.#$/[\]]/g, '_');
 }
 /** איתור פגישה שכבר יובאה, לפי מזהה או לפי כותרת+שעה */
 function findImportedAppt(iso, ev){
