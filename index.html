@@ -1828,7 +1828,7 @@ body.sidenav-on .app-bar{ padding-inline-end: 222px; }
 
 <header class="app-bar no-print">
   <div class="brand">
-    <b id="brandName">מתכנן</b><span>V4.8 · יומי · שבועי · חודשי · שנתי</span>
+    <b id="brandName">מתכנן</b><span>V4.8.1 · יומי · שבועי · חודשי · שנתי</span>
   </div>
 
   <div class="tabs" role="tablist" id="tabs">
@@ -1863,6 +1863,7 @@ body.sidenav-on .app-bar{ padding-inline-end: 222px; }
     <button class="btn icon" id="btnQuickAdd" title="הוספה מהירה בעברית (Ctrl+N)">⚡</button>
     <button class="btn icon" id="btnLayoutEdit" title="מצב עריכת פריסה — גרירת בלוקים (E)">✋</button>
     <button class="btn icon" id="btnWall" title="מצב קיר הסטודיו (W)">🖥</button>
+    <button class="btn icon" id="btnCheckUpdate" title="בדיקת עדכון גרסה">⬇️</button>
     <button class="btn icon" id="btnUndo" title="ביטול (Ctrl+Z)">↶</button>
     <button class="btn icon" id="btnRedo" title="ביצוע חוזר (Ctrl+Y)">↷</button>
     <button class="btn icon" id="btnBiz" title="סטודיו — עבודות, שעות וכספים">💼</button>
@@ -15596,6 +15597,7 @@ function wireUI(){
   /* --- V4 --- */
   $('#btnQuickAdd').addEventListener('click', () => openQuickAdd());
   $('#btnWall').addEventListener('click', () => Wall.open());
+  $('#btnCheckUpdate').addEventListener('click', () => SWU.checkNow());
   $('#btnLayoutEdit').addEventListener('click', () => LayoutEdit.toggle());
   $('#wallClose').addEventListener('click', () => Wall.close());
   $('#syncChip2').addEventListener('click', () => Sync.run({ manual: true }));
@@ -15768,19 +15770,53 @@ async function bootAfterUnlock(){
   }
   setInterval(updateNowLines, 60000);
   loadWeather().then(m => { if (m) renderAll(true); });
-  if ('serviceWorker' in navigator && location.protocol.startsWith('http')){
-    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
-      reg.addEventListener('updatefound', () => {
-        const w = reg.installing;
-        if (!w) return;
-        w.addEventListener('statechange', () => {
-          if (w.state === 'installed' && navigator.serviceWorker.controller)
-            toast('גרסה חדשה מוכנה — רענן את הדף');
-        });
-      });
-    }).catch(() => {});
-  }
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) setupSWUpdates();
 }
+
+/** בדיקת עדכון גרסה — כולל כפתור רענון גלוי (חשוב במיוחד ב-PWA מותקן, שאין
+    בו סרגל כתובת ללחוץ "רענון"), ובדיקה תקופתית ברקע כדי שחלון שנשאר פתוח
+    זמן רב יגלה גרסה חדשה בעצמו. */
+const SWU = {
+  reg: null,
+  async init(){
+    try {
+      this.reg = await navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' });
+    } catch(e){ return; }
+    // ה-Service Worker הקיים תמיד עושה skipWaiting לבד בהתקנה, אז לרוב לא יהיה
+    // "waiting" ממשי לתפוס — שני האזנות הבאות הן הרשת הבטיחות שבאמת עובדת בפועל:
+    this.reg.addEventListener('updatefound', () => {
+      const w = this.reg.installing;
+      if (!w) return;
+      w.addEventListener('statechange', () => { if (w.state === 'installed') this.showBanner(); });
+    });
+    navigator.serviceWorker.addEventListener('controllerchange', () => this.showBanner());
+    setInterval(() => { try { this.reg.update(); } catch(e){} }, 30 * 60000);
+  },
+  showBanner(){
+    if (document.getElementById('swUpdateBar')) return;
+    const bar = el('div', { id: 'swUpdateBar', class: 'backup-nudge' }, [
+      el('span', { text: '🔄 גרסה חדשה מוכנה' }),
+      el('button', { class: 'btn sm primary', onclick: () => location.reload() }, 'רענון עכשיו'),
+      el('button', { class: 'btn sm ghost', onclick: () => bar.remove() }, 'אחר כך')
+    ]);
+    document.body.appendChild(bar);
+    setTimeout(() => bar.classList.add('show'), 40);
+  },
+  /** בדיקה ידנית — כפתור בסרגל העליון. מחכה קצת לראות אם עדכון קרה,
+      ואם לא, מודיע שהגרסה כבר עדכנית. */
+  async checkNow(){
+    if (!this.reg){ toast('אין חיבור לעדכונים כרגע'); return; }
+    toast('בודק עדכון…');
+    const before = navigator.serviceWorker.controller;
+    try { await this.reg.update(); } catch(e){}
+    setTimeout(() => {
+      if (document.getElementById('swUpdateBar')) return;
+      if (navigator.serviceWorker.controller !== before || this.reg.waiting || this.reg.installing) this.showBanner();
+      else toast('אתה כבר בגרסה העדכנית');
+    }, 1800);
+  }
+};
+function setupSWUpdates(){ SWU.init(); }
 document.addEventListener('DOMContentLoaded', init);
 </script>
 </body>
