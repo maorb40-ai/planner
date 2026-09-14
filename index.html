@@ -1828,7 +1828,7 @@ body.sidenav-on .app-bar{ padding-inline-end: 222px; }
 
 <header class="app-bar no-print">
   <div class="brand">
-    <b id="brandName">מתכנן</b><span>V4.9.4 · יומי · שבועי · חודשי · שנתי</span>
+    <b id="brandName">מתכנן</b><span>V4.9.5 · יומי · שבועי · חודשי · שנתי</span>
   </div>
 
   <div class="tabs" role="tablist" id="tabs">
@@ -14250,6 +14250,11 @@ const CloudSync = {
     invalidateContactCache(); invalidatePlacesCache(); _evCache.key = null;
     applyTheme(); renderAll(true);
     if (conflicts.length) toast(`עודכן מהעננים (${conflicts.length} שינויים משולבים)`);
+    // אם למכשיר הזה היו נתונים מקומיים שהענן עדיין לא ידע עליהם (למשל: הוזנו
+    // לפני שהחיבור לענן עלה, או לפני שהמכשיר הזה התחבר בפעם הראשונה) — התוצאה
+    // המשולבת עשירה יותר מהמצב בענן. בלי לשלוח אותה בחזרה, הנתונים האלה
+    // נשארים "תקועים" מקומית לנצח ולעולם לא מגיעים למכשירים האחרים.
+    if (JSON.stringify(merged) !== incomingJSON) this.push();
   },
 
   push(){
