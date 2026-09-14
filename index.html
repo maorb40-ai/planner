@@ -1838,7 +1838,7 @@ body.sidenav-on .app-bar{ padding-inline-end: 222px; }
 
 <header class="app-bar no-print">
   <div class="brand">
-    <b id="brandName">מתכנן</b><span>V4.9.14 · יומי · שבועי · חודשי · שנתי</span>
+    <b id="brandName">מתכנן</b><span>V4.9.15 · יומי · שבועי · חודשי · שנתי</span>
   </div>
 
   <div class="tabs" role="tablist" id="tabs">
@@ -2603,7 +2603,22 @@ let _prevState = null;
 function persistNow(){
   DB.meta.updated = new Date().toISOString();
   try { localStorage.setItem(storeKey(), JSON.stringify(DB)); return true; }
-  catch(e){ toast('שגיאת שמירה — ייתכן שהאחסון מלא'); return false; }
+  catch(e){
+    // האחסון המקומי מלא — לפני שמדווחים על כישלון בפועל, מפנים מקום שתפוסה
+    // ע״י גיבויי-גרסאות ישנים (יש להם עותק גם בקובץ/בעננים, כך שאין אובדן
+    // מידע אמיתי) ומנסים לשמור שוב. זה בדיוק המקרה שגרם לנתונים האמיתיים
+    // (למשל אחרי ייבוא של אלפי אנשי קשר) לא להישמר בכלל.
+    let freed = false;
+    try {
+      const list = readVersions();
+      if (list.length > 1){ writeVersions(list.slice(0, 1)); freed = true; }
+    } catch(e2){}
+    if (freed){
+      try { localStorage.setItem(storeKey(), JSON.stringify(DB)); return true; } catch(e3){}
+    }
+    toast('שגיאת שמירה — האחסון המקומי מלא. אפשר לפנות מקום בהגדרות ← אחסון וגיבוי ← בדיקת תקינות נתונים, או למחוק היסטוריית גרסאות ישנות');
+    return false;
+  }
 }
 const saveDB = debounce(() => {
   const cur = JSON.stringify(DB);
@@ -2850,8 +2865,18 @@ function makeVersion(manual){
   const list = readVersions();
   if (list.length && list[0].data === snap && !manual) return false;
   list.unshift({ at: Date.now(), size: snap.length, manual: !!manual, data: snap });
-  while (list.length > 10) list.pop();
-  writeVersions(list);
+  // מגבילים לפי גודל כולל ולא רק לפי מספר גרסאות — כשה-DB גדול (הרבה אנשי
+  // קשר/ימים), 10 עותקים מלאים שלו יכולים לתפוס את כל האחסון המקומי (שהמכשיר
+  // מגביל לכמה מגה-בייט בסך הכול) ולגרום לכל שמירה עתידית, כולל של הנתונים
+  // האמיתיים, להיכשל בשגיאת "אחסון מלא"
+  const MAX_TOTAL = 4 * 1024 * 1024;
+  let total = 0, kept = [];
+  for (const v of list){
+    const sz = v.size || (v.data ? v.data.length : 0);
+    if (kept.length && (total + sz > MAX_TOTAL || kept.length >= 10)) break;
+    kept.push(v); total += sz;
+  }
+  writeVersions(kept);
   return true;
 }
 let _lastBackupAt = 0;
@@ -2907,6 +2932,13 @@ function openVersions(){
     box
   ], [
     el('button', { class: 'btn primary', onclick: () => { makeVersion(true); draw(); toast('גרסה נשמרה'); } }, '＋ שמירת גרסה עכשיו'),
+    el('button', { class: 'btn', title: 'משאיר רק את הגרסה האחרונה — מפנה מקום באחסון המקומי',
+      onclick: () => {
+      const list = readVersions();
+      if (list.length <= 1){ toast('אין גרסאות נוספות למחיקה'); return; }
+      if (!confirm(`למחוק ${list.length - 1} גרסאות ישנות ולהשאיר רק את האחרונה?`)) return;
+      writeVersions(list.slice(0, 1)); draw(); toast('גרסאות ישנות נמחקו — פונה מקום באחסון');
+    } }, '🧹 ניקוי גרסאות ישנות'),
     el('button', { class: 'btn', onclick: closeModal }, 'סגירה')
   ]);
 }
@@ -5627,11 +5659,14 @@ function searchAll(q){
   const needle = q.trim().toLowerCase();
   if (needle.length < 2) return [];
   const hits = [];
-  const push = (iso, where, text) => {
+  // onOpen: פעולה ישירה לפתיחת התוצאה (כרטיס איש קשר, עבודה וכו') — בלי זה,
+  // תוצאה בלי תאריך (כמו איש קשר) לא הובילה לשום מקום בלחיצה, ולא היה
+  // אפשר "לפתוח" אותה מהחיפוש הכללי, רק לגלול על כל אנשי הקשר ביד
+  const push = (iso, where, text, onOpen) => {
     if (!text) return;
     const i = String(text).toLowerCase().indexOf(needle);
     if (i < 0) return;
-    hits.push({ iso, where, text: String(text), pos: i });
+    hits.push({ iso, where, text: String(text), pos: i, onOpen });
   };
   for (const [iso, r] of Object.entries(DB.days)){
     Object.entries(r.schedule || {}).forEach(([t, v]) => push(iso, t, v));
@@ -5654,12 +5689,16 @@ function searchAll(q){
   DB.events.forEach(ev => push('', 'אירוע אישי', ev.title + ' ' + (ev.note || '')));
   DB.recurring.forEach(r => push('', 'משימה קבועה', r.title));
   DB.contacts.forEach(c => push('', 'איש קשר',
-    [c.name, c.phone, c.email, c.org, c.note, (c.tags || []).join(' ')].filter(Boolean).join(' · ')));
+    [c.name, c.phone, c.email, c.org, c.note, (c.tags || []).join(' ')].filter(Boolean).join(' · '),
+    () => openClientCard(c.id)));
   DB.jobs.forEach(j => push(j.iso || '', '📷 עבודה',
-    [j.title, j.kind, j.where, contactName(j.who), j.note].filter(Boolean).join(' · ')));
+    [j.title, j.kind, j.where, contactName(j.who), j.note].filter(Boolean).join(' · '),
+    () => openJobEditor(j)));
   DB.docs.forEach(d => push(d.iso || '', '🧾 מסמך',
-    [DOC_KINDS[d.kind] ? DOC_KINDS[d.kind].name : '', d.number, contactName(d.who), d.terms].filter(Boolean).join(' · ')));
-  DB.leads.forEach(l => push(l.iso || '', '📈 פנייה', [l.name, l.phone, l.source, l.note].filter(Boolean).join(' · ')));
+    [DOC_KINDS[d.kind] ? DOC_KINDS[d.kind].name : '', d.number, contactName(d.who), d.terms].filter(Boolean).join(' · '),
+    () => editDoc(d)));
+  DB.leads.forEach(l => push(l.iso || '', '📈 פנייה', [l.name, l.phone, l.source, l.note].filter(Boolean).join(' · '),
+    () => openLeadEditor(l)));
   hits.sort((a, b) => (b.iso || '').localeCompare(a.iso || ''));
   return hits.slice(0, 80);
 }
@@ -5702,8 +5741,9 @@ function renderSearchResults(q){
       dateLabel = `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()} · ${hebOf(d).short}`;
     }
     box.appendChild(el('button', { class: 'sres', onclick: () => {
-      if (/^\d{4}-\d{2}-\d{2}$/.test(h.iso)){ State.cursor = fromISO(h.iso); setView('day'); }
       closeSearch();
+      if (h.onOpen){ h.onOpen(); return; }
+      if (/^\d{4}-\d{2}-\d{2}$/.test(h.iso)){ State.cursor = fromISO(h.iso); setView('day'); }
     } }, [
       el('span', { class: 'd', text: dateLabel }),
       el('span', { class: 'w', text: h.where }),
